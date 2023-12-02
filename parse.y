@@ -18,8 +18,9 @@
 %left	ANDAND OROR NL
 %left	'!'
 %left	PIPE
-%right	'$'
+%right	VWORD
 %left	SUB
+%right	'$'
 
 %union {
 	Tree *tree;
@@ -31,7 +32,7 @@
 %type <tree>	REDIR PIPE DUP
 		body cmd cmdsa cmdsan comword first fn line word param assign
 		args binding bindings params nlwords words simple redir sword
-		cases case
+		cases case vword vsword
 %type <kind>	binder
 
 %start es
@@ -110,12 +111,17 @@ sword	: comword			{ $$ = $1; }
 word	: sword				{ $$ = $1; }
 	| word '^' sword		{ $$ = mk(nConcat, $1, $3); }
 
-comword	: param				{ $$ = $1; }
+comword	: vword				{ $$ = $1; }
+	| '$' vsword SUB words ')'	{ $$ = mk(nVarsub, $2, $4); }
+
+vsword	: vword				{ $$ = $1; }
+	| keyword			{ $$ = mk(nWord, $1); }
+
+vword	: param				{ $$ = $1; }
 	| '(' nlwords ')'		{ $$ = $2; }
 	| '{' body '}'			{ $$ = thunkify($2); }
 	| '@' params '{' body '}'	{ $$ = mklambda($2, $4); }
-	| '$' sword			{ $$ = mk(nVar, $2); }
-	| '$' sword SUB words ')'	{ $$ = mk(nVarsub, $2, $4); }
+	| '$' vsword	%prec VWORD	{ $$ = mk(nVar, $2); }
 	| CALL sword			{ $$ = mk(nCall, $2); }
 	| COUNT sword			{ $$ = mk(nCall, prefix("%count", treecons(mk(nVar, $2), NULL))); }
 	| FLAT sword			{ $$ = flatten(mk(nVar, $2), " "); }
