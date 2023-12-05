@@ -87,7 +87,7 @@ static List *qconcat(List *list1, List *list2, StrList *ql1, StrList *ql2, StrLi
 static List *subscript(List *list, List *subs) {
 	int lo, hi, len, counter;
 	List *result, **prevp, *current;
-	Boolean rev;
+	Boolean reverse;
 
 	gcdisable();
 
@@ -124,30 +124,32 @@ static List *subscript(List *list, List *subs) {
 					fail("es:subscript", "bad subscript: %s", bad);
 					RefEnd(bad);
 				}
-				if (hi > len)
-					hi = len;
 				subs = subs->next;
 			}
 		} else
 			hi = lo;
-		if (lo > len)
-			continue;
 		if (counter > lo) {
 			current = list;
 			counter = 1;
 		}
-		rev = (lo > hi);
-		if (rev) {
+
+		reverse = (lo > hi);
+		if (reverse) {
 			int tmp = lo;
 			lo = hi;
 			hi = tmp;
 		}
+
+		if (lo > len)
+			continue;
+		if (hi > len)
+			hi = len;
+
 		for (; counter < lo; counter++, current = current->next)
 			;
-		if (rev) {
-			for (; counter <= hi; counter++, current = current->next) {
+		if (reverse) {
+			for (; counter <= hi; counter++, current = current->next)
 				*prevp = mklist(current->term, *prevp);
-			}
 			while (*prevp != NULL)
 				prevp = &(*prevp)->next;
 		} else {
