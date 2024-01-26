@@ -14,7 +14,7 @@
 #if BSD_LIMITS || BUILTIN_TIME
 #include <sys/time.h>
 #include <sys/resource.h>
-#if !HAVE_WAIT3
+#if !HAVE_GETRUSAGE
 #include <sys/times.h>
 #include <limits.h>
 #endif
@@ -338,7 +338,7 @@ PRIM(limit) {
 #if BUILTIN_TIME
 PRIM(time) {
 
-#if HAVE_WAIT3
+#if HAVE_GETRUSAGE
 
 	int pid, status;
 	time_t t0, t1;
@@ -367,7 +367,7 @@ PRIM(time) {
 	RefEnd(lp);
 	return mklist(mkstr(mkstatus(status)), NULL);
 
-#else	/* !HAVE_WAIT3 */
+#else	/* !HAVE_GETRUSAGE */
 
 	int pid, status;
 	Ref(List *, lp, list);
@@ -411,7 +411,7 @@ PRIM(time) {
 	RefEnd(lp);
 	return mklist(mkstr(mkstatus(status)), NULL);
 
-#endif	/* !HAVE_WAIT3 */
+#endif	/* !HAVE_GETRUSAGE */
 
 }
 #endif	/* BUILTIN_TIME */

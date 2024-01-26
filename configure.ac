@@ -34,6 +34,7 @@ dnl saved_CFLAGS="$CFLAGS"
 
 dnl Checks for programs.
 AC_PROG_CC
+AC_PROG_CPP
 AC_PROG_INSTALL
 AC_PROG_MKDIR_P
 AC_PROG_YACC
@@ -92,9 +93,8 @@ AC_TYPE_GETGROUPS
 AC_PROG_GCC_TRADITIONAL
 AC_FUNC_MMAP
 
-AC_FUNC_WAIT3
 AC_CHECK_FUNCS(strerror strtol lstat setrlimit sigrelse sighold sigaction \
-sysconf setsid sigsetjmp)
+sysconf setsid sigsetjmp getrusage)
 
 AC_CACHE_CHECK(for an abused getenv, es_cv_abused_getenv,
 AC_RUN_IFELSE([AC_LANG_SOURCE([[

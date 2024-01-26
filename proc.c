@@ -4,7 +4,7 @@
 
 /* TODO: the rusage code for the time builtin really needs to be cleaned up */
 
-#if HAVE_WAIT3
+#if HAVE_GETRUSAGE
 #include <sys/time.h>
 #include <sys/resource.h>
 #endif
@@ -17,7 +17,7 @@ struct Proc {
 	int status;
 	Boolean alive, background;
 	Proc *next, *prev;
-#if HAVE_WAIT3
+#if HAVE_GETRUSAGE
 	struct rusage rusage;
 #endif
 };
@@ -69,10 +69,6 @@ extern int efork(Boolean parent, Boolean background) {
 	return 0;
 }
 
-#if HAVE_WAIT3
-static struct rusage wait_rusage;
-#endif
-
 /* dowait -- a wait wrapper that interfaces with signals */
 static int dowait(int *statusp) {
 	int n;
@@ -80,11 +76,7 @@ static int dowait(int *statusp) {
 	if (!setjmp(slowlabel)) {
 		slow = TRUE;
 		n = interrupted ? -2 :
-#if HAVE_WAIT3
-			wait3((void *) statusp, 0, &wait_rusage);
-#else
 			wait((void *) statusp);
-#endif
 	} else
 		n = -2;
 	slow = FALSE;
@@ -98,13 +90,17 @@ static int dowait(int *statusp) {
 /* reap -- mark a process as dead and attach its exit status */
 static void reap(int pid, int status) {
 	Proc *proc;
+#if HAVE_GETRUSAGE
+	struct rusage rusage;
+	getrusage(RUSAGE_CHILDREN, &rusage);
+#endif
 	for (proc = proclist; proc != NULL; proc = proc->next)
 		if (proc->pid == pid) {
 			assert(proc->alive);
 			proc->alive = FALSE;
 			proc->status = status;
-#if HAVE_WAIT3
-			proc->rusage = wait_rusage;
+#if HAVE_GETRUSAGE
+			proc->rusage = rusage;
 #endif
 			return;
 		}
@@ -134,9 +130,6 @@ top:
 					else
 						fail("es:ewait", "wait: %s", esstrerror(errno));
 				proc->alive = FALSE;
-#if HAVE_WAIT3
-				proc->rusage = wait_rusage;
-#endif
 			}
 			if (proc->next != NULL)
 				proc->next->prev = proc->prev;
@@ -148,7 +141,7 @@ top:
 			if (proc->background)
 				printstatus(proc->pid, status);
 			efree(proc);
-#if HAVE_WAIT3
+#if HAVE_GETRUSAGE
 			if (rusage != NULL)
 				memcpy(rusage, &proc->rusage, sizeof (struct rusage));
 #else
