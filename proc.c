@@ -184,6 +184,12 @@ extern int ewait(int pid, Boolean interruptible, void *rusage) {
 
 	proc = reap(deadpid, status);
 	unlist(proc, &proclist);
+#if HAVE_GETRUSAGE
+	if (rusage != NULL)
+		memcpy(rusage, &proc->rusage, sizeof (struct rusage));
+#else
+	assert(rusage == NULL);
+#endif
 	if (proc->background)
 		printstatus(proc->pid, status);
 	efree(proc);
