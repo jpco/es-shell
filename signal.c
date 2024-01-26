@@ -5,7 +5,7 @@
 
 typedef void (*Sighandler)(int);
 
-Boolean sigint_newline = TRUE;
+Boolean termsig_newline = TRUE;
 
 jmp_buf slowlabel;
 Atomic slow = FALSE;
@@ -119,7 +119,8 @@ extern Sigeffect esignal(int sig, Sigeffect effect) {
 			}
 			break;
 		case sig_special:
-			if (sig != SIGINT) {
+			/* are these three always the signals the terminal can send? */
+			if (sig != SIGINT && sig != SIGTSTP && sig != SIGQUIT) {
 				eprint("$&setsignals: special handler not defined for %s\n", signame(sig));
 				return old;
 			}
@@ -302,11 +303,11 @@ extern void sigchk(void) {
 		throw(e);
 		NOTREACHED;
 	case sig_special:
-		assert(sig == SIGINT);
-		/* this is the newline you see when you hit ^C while typing a command */
-		if (sigint_newline)
+		assert(sig == SIGINT || sig == SIGTSTP || sig == SIGQUIT);
+		/* this is the newline you see when you hit (^C ^Z ^\) while typing a command */
+		if (termsig_newline)
 			eprint("\n");
-		sigint_newline = TRUE;
+		termsig_newline = TRUE;
 		while (gcisblocked())
 			gcenable();
 		throw(e);
