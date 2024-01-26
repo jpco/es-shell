@@ -69,26 +69,8 @@ extern int efork(Boolean parent, Boolean background) {
 	return 0;
 }
 
-/* dowait -- a wait wrapper that interfaces with signals */
-static int dowait(int *statusp) {
-	int n;
-	interrupted = FALSE;
-	if (!setjmp(slowlabel)) {
-		slow = TRUE;
-		n = interrupted ? -2 :
-			wait((void *) statusp);
-	} else
-		n = -2;
-	slow = FALSE;
-	if (n == -2) {
-		errno = EINTR;
-		n = -1;
-	}
-	return n;
-}
-
 /* reap -- mark a process as dead and attach its exit status */
-static void reap(int pid, int status) {
+static Proc *reap(int pid, int status) {
 	Proc *proc;
 #if HAVE_GETRUSAGE
 	struct rusage rusage;
@@ -102,66 +84,110 @@ static void reap(int pid, int status) {
 #if HAVE_GETRUSAGE
 			proc->rusage = rusage;
 #endif
-			return;
+			return proc;
 		}
+	return NULL;
+}
+
+static void unlist(Proc *proc, Proc **list) {
+	assert(proc != NULL && list != NULL);
+	if (proc->next != NULL)
+		proc->next->prev = proc->prev;
+	if (proc->prev != NULL)
+		proc->prev->next = proc->next;
+	else
+		*list = proc->next;
+}
+
+#if !HAVE_WAITPID
+
+/* Limited imitation of waitpid().  Can't power job control, and marks some
+ * background procs as dead earlier than the real one does, but that's ok. */
+static int fakewaitpid(int pid, int *statusp, int opts) {
+	int deadpid, status;
+	Proc *p;
+
+	if (pid < -1 || (opts != 0 && opts != WUNTRACED)) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	/* return an already-dead proc or something new */
+	if (pid < 1) {
+		for (p = proclist; p != NULL; p = p->next)
+			if (!p->alive) {
+				*statusp = p->status;
+				/* hack!!! */
+				p->alive = TRUE;
+				return p->pid;
+			}
+		return wait(statusp);
+	}
+
+	while ((deadpid = wait(&status)) != pid) {
+		if (deadpid == -1)
+			return deadpid;
+		for (p = proclist; p != NULL; p = p->next)
+			if (p->pid == deadpid) {
+				p->alive = FALSE;
+				p->status = status;
+				break;
+			}
+		assert(p != NULL);
+	}
+
+	*statusp = status;
+	return pid;
+}
+
+#endif
+
+/* dowaitpid -- a waitpid wrapper that interfaces with signals */
+static int dowaitpid(int pid, int *statusp, int opts) {
+	int n;
+	interrupted = FALSE;
+	if (!setjmp(slowlabel)) {
+		slow = TRUE;
+		n = interrupted ? -2 :
+#if HAVE_WAITPID
+			waitpid(pid, (void *) statusp, opts);
+#else
+			fakewaitpid(pid, (void *) statusp, opts);
+#endif
+	} else
+		n = -2;
+	slow = FALSE;
+	if (n == -2) {
+		errno = EINTR;
+		n = -1;
+	}
+	return n;
 }
 
 /* ewait -- wait for a specific process to die, or any process if pid == 0 */
 extern int ewait(int pid, Boolean interruptible, void *rusage) {
 	Proc *proc;
-top:
-	for (proc = proclist; proc != NULL; proc = proc->next)
-		if (proc->pid == pid || (pid == 0 && !proc->alive)) {
-			int status;
-			if (proc->alive) {
-				int deadpid;
-				int seen_eintr = FALSE;
-				while ((deadpid = dowait(&proc->status)) != pid)
-					if (deadpid != -1)
-						reap(deadpid, proc->status);
-					else if (errno == EINTR) {
-						if (interruptible)
-							SIGCHK();
-						seen_eintr = TRUE;
-					} else if (errno == ECHILD && seen_eintr)
-						/* TODO: not clear on why this is necessary
-						 * (child procs _sometimes_ disappear after SIGINT) */
-						break;
-					else
-						fail("es:ewait", "wait: %s", esstrerror(errno));
-				proc->alive = FALSE;
-			}
-			if (proc->next != NULL)
-				proc->next->prev = proc->prev;
-			if (proc->prev != NULL)
-				proc->prev->next = proc->next;
-			else
-				proclist = proc->next;
-			status = proc->status;
-			if (proc->background)
-				printstatus(proc->pid, status);
-			efree(proc);
-#if HAVE_GETRUSAGE
-			if (rusage != NULL)
-				memcpy(rusage, &proc->rusage, sizeof (struct rusage));
-#else
-			assert(rusage == NULL);
-#endif
-			return status;
-		}
-	if (pid == 0) {
-		int status;
-		while ((pid = dowait(&status)) == -1) {
-			if (errno != EINTR)
-				fail("es:ewait", "wait: %s", esstrerror(errno));
+	int deadpid, status;
+	Boolean seen_eintr = FALSE;
+	/* Hack pid to -1: background procs may have been setpgid/setsid elsewhere */
+	while ((deadpid = dowaitpid(pid == 0 ? -1 : pid, &status, WUNTRACED)) == -1)
+		if (errno == EINTR) {
 			if (interruptible)
 				SIGCHK();
-		}
-		reap(pid, status);
-		goto top;
-	}
-	fail("es:ewait", "wait: %d is not a child of this shell", pid);
-	NOTREACHED;
+			seen_eintr = TRUE;
+		} else if (errno == ECHILD && seen_eintr)
+			/* TODO: not clear on why this is necessary
+			 * (sometimes child procs disappear after SIGINT) */
+			break;
+		else
+			fail("es:ewait", "wait: %s", esstrerror(errno));
+
+	proc = reap(deadpid, status);
+	unlist(proc, &proclist);
+	if (proc->background)
+		printstatus(proc->pid, status);
+	efree(proc);
+	return status;
 }
 
 #include "prim.h"
