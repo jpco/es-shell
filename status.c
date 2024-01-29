@@ -63,20 +63,42 @@ extern char *mkstatus(int status) {
 	return str("%d", SEXITSTATUS(status));
 }
 
+extern Boolean sifsignaled(List *status) {
+	Boolean signaled = FALSE;
+	Ref(List *, lp, status);
+	for (; lp != NULL; lp = lp->next)
+		if (signumber(getstr(lp->term)) >= 0) {
+			signaled = TRUE;
+			break;
+		}
+	RefEnd(lp);
+	return signaled;
+}
+
 /* printstatus -- print the status if we should */
-extern void printstatus(int pid, int status) {
-	if (SIFSIGNALED(status)) {
-		const char *msg = sigmessage(STERMSIG(status)), *tail = "";
-		if (SCOREDUMP(status)) {
-			tail = "--core dumped";
-			if (*msg == '\0')
-				tail += (sizeof "--") - 1;
+extern void printstatus(int pid, List *list) {
+	Ref(List *, lp, list);
+	for (; lp != NULL; lp = lp->next) {
+		int signum;
+		Ref(char *, status, NULL);
+
+		status = getstr(lp->term);
+		signum = signumber(status);
+		if (signum > 0) {
+			const char *msg = sigmessage(signum), *tail = "";
+			if (sigcore(status)) {
+				tail = "--core dumped";
+				if (*msg == '\0')
+					tail += (sizeof "--") - 1;
+			}
+			if (*msg != '\0' || *tail != '\0') {
+				if (pid == 0)
+					eprint("%s%s\n", msg, tail);
+				else
+					eprint("%d: %s%s\n", pid, msg, tail);
+			}
 		}
-		if (*msg != '\0' || *tail != '\0') {
-			if (pid == 0)
-				eprint("%s%s\n", msg, tail);
-			else
-				eprint("%d: %s%s\n", pid, msg, tail);
-		}
+		RefEnd(status);
 	}
+	RefEnd(lp);
 }

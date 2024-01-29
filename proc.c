@@ -163,7 +163,7 @@ static int dowaitpid(int pid, int *statusp, int opts) {
 }
 
 /* ewait -- wait for a specific process to die, or any process if pid == 0 */
-extern int ewait(int pid, Boolean interruptible, void *rusage) {
+extern List *ewait(int pid, Boolean interruptible, void *rusage) {
 	Proc *proc;
 	int deadpid, status;
 	Boolean seen_eintr = FALSE;
@@ -189,7 +189,7 @@ extern int ewait(int pid, Boolean interruptible, void *rusage) {
 	assert(rusage == NULL);
 #endif
 	efree(proc);
-	return status;
+	return mklist(mkstr(mkstatus(status)), NULL);
 }
 
 #include "prim.h"
@@ -207,7 +207,7 @@ PRIM(apids) {
 }
 
 PRIM(wait) {
-	int pid, status;
+	int pid;
 	if (list == NULL)
 		pid = 0;
 	else if (list->next == NULL) {
@@ -220,10 +220,9 @@ PRIM(wait) {
 		fail("$&wait", "usage: wait [pid]");
 		NOTREACHED;
 	}
-	status = ewait(pid, TRUE, NULL);
+	Ref(List *, status, ewait(pid, TRUE, NULL));
 	printstatus(pid, status);
-
-	return mklist(mkstr(mkstatus(status)), NULL);
+	RefReturn(status);
 }
 
 extern Dict *initprims_proc(Dict *primdict) {

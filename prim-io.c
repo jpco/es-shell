@@ -233,11 +233,10 @@ PRIM(pipe) {
 
 	Ref(List *, result, NULL);
 	do {
-		Term *t;
-		int status = ewaitfor(pids[--n]);
+		Ref(List *, status, ewaitfor(pids[--n]));
 		printstatus(0, status);
-		t = mkstr(mkstatus(status));
-		result = mklist(t, result);
+		result = append(status, result);
+		RefEnd(status);
 	} while (0 < n);
 	if (evalflags & eval_inchild)
 		exit(exitstatus(result));
@@ -246,7 +245,7 @@ PRIM(pipe) {
 
 #if HAVE_DEV_FD
 PRIM(readfrom) {
-	int pid, p[2], status;
+	int pid, p[2];
 	Push push;
 
 	caller = "$&readfrom";
@@ -278,15 +277,14 @@ PRIM(readfrom) {
 	EndExceptionHandler
 
 	close(p[0]);
-	status = ewaitfor(pid);
-	printstatus(0, status);
+	printstatus(0, ewaitfor(pid));
 	varpop(&push);
 	RefEnd3(cmd, input, var);
 	RefReturn(lp);
 }
 
 PRIM(writeto) {
-	int pid, p[2], status;
+	int pid, p[2];
 	Push push;
 
 	caller = "$&writeto";
@@ -318,8 +316,7 @@ PRIM(writeto) {
 	EndExceptionHandler
 
 	close(p[1]);
-	status = ewaitfor(pid);
-	printstatus(0, status);
+	printstatus(0, ewaitfor(pid));
 	varpop(&push);
 	RefEnd3(cmd, output, var);
 	RefReturn(lp);
@@ -347,8 +344,9 @@ restart:
 }
 
 PRIM(backquote) {
-	int pid, p[2], status;
-	
+	int pid, p[2];
+	List *status;
+
 	caller = "$&backquote";
 	if (list == NULL)
 		fail(caller, "usage: backquote separator command [args ...]");
@@ -369,7 +367,7 @@ PRIM(backquote) {
 	close(p[0]);
 	status = ewaitfor(pid);
 	printstatus(0, status);
-	lp = mklist(mkstr(mkstatus(status)), lp);
+	lp = append(status, lp);
 	gcenable();
 	list = lp;
 	RefEnd2(sep, lp);

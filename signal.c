@@ -31,11 +31,26 @@ static Sigeffect sigeffect[NSIG];
  * name<->signal mappings
  */
 
-extern int signumber(const char *name) {
+extern Boolean sigcore(const char *name) {
+	char *suffix;
+	if ((suffix = strchr(name, '+')) != NULL)
+		if (streq(suffix, "+core"))
+			return TRUE;
+	return FALSE;
+}
+
+extern int signumber(const char *name0) {
 	int i;
 	char *suffix;
+	char *name = str("%s", name0);
+
 	if (!hasprefix(name, "sig"))
 		return -1;
+
+	if ((suffix = strchr(name, '+')) != NULL)
+		if (streq(suffix, "+core"))
+			*suffix = '\0';
+
 	for (i = 0; i < nsignals; i++)
 		if (streq(signals[i].name, name))
 			return signals[i].sig;

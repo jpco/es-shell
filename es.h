@@ -210,7 +210,8 @@ extern List *true, *false;
 extern Boolean istrue(List *status);
 extern int exitstatus(List *status);
 extern char *mkstatus(int status);
-extern void printstatus(int pid, int status);
+extern void printstatus(int pid, List *);
+extern Boolean sifsignaled(List *status);
 
 
 /* access.c */
@@ -222,7 +223,7 @@ extern char *checkexecutable(char *file);
 
 extern Boolean hasforked;
 extern int efork(Boolean parent);
-extern int ewait(int pid, Boolean interruptible, void *rusage);
+extern List *ewait(int pid, Boolean interruptible, void *rusage);
 #define	ewaitfor(pid)	ewait(pid, FALSE, NULL)
 
 
@@ -326,6 +327,7 @@ extern List *fsplit(const char *sep, List *list, Boolean coalesce);
 
 /* signal.c */
 
+extern Boolean sigcore(const char *name);
 extern int signumber(const char *name);
 extern char *signame(int sig);
 extern char *sigmessage(int sig);

@@ -56,14 +56,14 @@ PRIM(background) {
 }
 
 PRIM(fork) {
-	int pid, status;
+	int pid;
 	pid = efork(TRUE);
 	if (pid == 0)
 		exit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));
-	status = ewaitfor(pid);
+	Ref(List *, status, ewaitfor(pid));
 	SIGCHK();
 	printstatus(0, status);
-	return mklist(mkstr(mkstatus(status)), NULL);
+	RefReturn(status);
 }
 
 static noreturn failexec(char *file, List *args) {
@@ -86,7 +86,7 @@ static noreturn failexec(char *file, List *args) {
 
 /* forkexec -- fork (if necessary) and exec */
 static List *forkexec(char *file, List *list, Boolean inchild) {
-	int pid, status;
+	int pid;
 	Vector *env;
 	gcdisable();
 	env = mkenv();
@@ -96,15 +96,15 @@ static List *forkexec(char *file, List *list, Boolean inchild) {
 		failexec(file, list);
 	}
 	gcenable();
-	status = ewaitfor(pid);
-	if ((status & 0xff) == 0) {
+	Ref(List *, status, ewaitfor(pid));
+	if (!sifsignaled(status)) {
 		termsig_newline = FALSE;
 		SIGCHK();
 		termsig_newline = TRUE;
 	} else
 		SIGCHK();
 	printstatus(0, status);
-	return mklist(mkterm(mkstatus(status), NULL), NULL);
+	RefReturn(status);
 }
 
 PRIM(run) {
@@ -340,10 +340,11 @@ PRIM(time) {
 
 #if HAVE_GETRUSAGE
 
-	int pid, status;
+	int pid;
 	time_t t0, t1;
 	struct rusage r;
 
+	Ref(List *, status, NULL);
 	Ref(List *, lp, list);
 
 	gc();	/* do a garbage collection first to ensure reproducible results */
@@ -365,11 +366,12 @@ PRIM(time) {
 	);
 
 	RefEnd(lp);
-	return mklist(mkstr(mkstatus(status)), NULL);
+	RefReturn(status);
 
 #else	/* !HAVE_GETRUSAGE */
 
-	int pid, status;
+	int pid;
+	Ref(List *, status, NULL);
 	Ref(List *, lp, list);
 
 	gc();	/* do a garbage collection first to ensure reproducible results */
@@ -402,14 +404,14 @@ PRIM(time) {
 			tms.tms_cstime / ticks, ((tms.tms_cstime * 10) / ticks) % 10,
 			lp, " "
 		);
-		exit(status);
+		exit(exitstatus(status));
 	}
 	status = ewaitfor(pid);
 	SIGCHK();
 	printstatus(0, status);
 
 	RefEnd(lp);
-	return mklist(mkstr(mkstatus(status)), NULL);
+	RefReturn(status);
 
 #endif	/* !HAVE_GETRUSAGE */
 
