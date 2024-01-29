@@ -15,7 +15,7 @@ typedef struct Proc Proc;
 struct Proc {
 	int pid;
 	int status;
-	Boolean alive, background;
+	Boolean alive;
 	Proc *next, *prev;
 #if HAVE_GETRUSAGE
 	struct rusage rusage;
@@ -25,7 +25,7 @@ struct Proc {
 static Proc *proclist = NULL;
 
 /* mkproc -- create a Proc structure */
-extern Proc *mkproc(int pid, Boolean background) {
+static Proc *mkproc(int pid) {
 	Proc *proc;
 	for (proc = proclist; proc != NULL; proc = proc->next)
 		if (proc->pid == pid) {		/* are we recycling pids? */
@@ -38,18 +38,17 @@ extern Proc *mkproc(int pid, Boolean background) {
 	}
 	proc->pid = pid;
 	proc->alive = TRUE;
-	proc->background = background;
 	proc->prev = NULL;
 	return proc;
 }
 
 /* efork -- fork (if necessary) and clean up as appropriate */
-extern int efork(Boolean parent, Boolean background) {
+extern int efork(Boolean parent) {
 	if (parent) {
 		int pid = fork();
 		switch (pid) {
 		default: {	/* parent */
-			Proc *proc = mkproc(pid, background);
+			Proc *proc = mkproc(pid);
 			if (proclist != NULL)
 				proclist->prev = proc;
 			proclist = proc;
@@ -112,7 +111,6 @@ static int fakewaitpid(int pid, int *statusp, int opts) {
 		return -1;
 	}
 
-	/* return an already-dead proc or something new */
 	if (pid < 1) {
 		for (p = proclist; p != NULL; p = p->next)
 			if (!p->alive) {
@@ -190,8 +188,6 @@ extern int ewait(int pid, Boolean interruptible, void *rusage) {
 #else
 	assert(rusage == NULL);
 #endif
-	if (proc->background)
-		printstatus(proc->pid, status);
 	efree(proc);
 	return status;
 }
@@ -202,7 +198,7 @@ PRIM(apids) {
 	Proc *p;
 	Ref(List *, lp, NULL);
 	for (p = proclist; p != NULL; p = p->next)
-		if (p->background && p->alive) {
+		if (p->alive) {
 			Term *t = mkstr(str("%d", p->pid));
 			lp = mklist(t, lp);
 		}
@@ -211,7 +207,7 @@ PRIM(apids) {
 }
 
 PRIM(wait) {
-	int pid;
+	int pid, status;
 	if (list == NULL)
 		pid = 0;
 	else if (list->next == NULL) {
@@ -224,7 +220,10 @@ PRIM(wait) {
 		fail("$&wait", "usage: wait [pid]");
 		NOTREACHED;
 	}
-	return mklist(mkstr(mkstatus(ewait(pid, TRUE, NULL))), NULL);
+	status = ewait(pid, TRUE, NULL);
+	printstatus(pid, status);
+
+	return mklist(mkstr(mkstatus(status)), NULL);
 }
 
 extern Dict *initprims_proc(Dict *primdict) {

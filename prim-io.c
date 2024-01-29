@@ -141,7 +141,7 @@ static int pipefork(int p[2], int *extra) {
 		registerfd(extra, FALSE);
 
 	ExceptionHandler
-		pid = efork(TRUE, FALSE);
+		pid = efork(TRUE);
 	CatchExceptionIf (pid != 0, e)
 		unregisterfd(&p[0]);
 		unregisterfd(&p[1]);
@@ -205,7 +205,7 @@ PRIM(pipe) {
 	for (;; list = list->next) {
 		int p[2], pid;
 		
-		pid = (list->next == NULL) ? efork(TRUE, FALSE) : pipefork(p, &inpipe);
+		pid = (list->next == NULL) ? efork(TRUE) : pipefork(p, &inpipe);
 
 		if (pid == 0) {		/* child */
 			if (inpipe != -1) {

@@ -221,7 +221,7 @@ extern char *checkexecutable(char *file);
 /* proc.c */
 
 extern Boolean hasforked;
-extern int efork(Boolean parent, Boolean background);
+extern int efork(Boolean parent);
 extern int ewait(int pid, Boolean interruptible, void *rusage);
 #define	ewaitfor(pid)	ewait(pid, FALSE, NULL)
 

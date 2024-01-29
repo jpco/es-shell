@@ -269,9 +269,6 @@ extern int getgroups(int, int *);
  * hacks to present a standard system call interface
  */
 
-#ifdef HAVE_SETSID
-# define setpgrp(a, b)	setsid()
-#else
 #if defined(linux) || defined(__GLIBC__)
 #include "unistd.h"
 #define setpgrp(a, b)	setpgid(a, b)
@@ -283,7 +280,6 @@ extern int getgroups(int, int *);
 
 #if HPUX
 #define	setpgrp(a, b)	setpgrp()
-#endif
 #endif
 
 #if !HAVE_LSTAT

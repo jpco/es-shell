@@ -43,7 +43,7 @@ PRIM(newpgrp) {
 }
 
 PRIM(background) {
-	int pid = efork(TRUE, TRUE);
+	int pid = efork(TRUE);
 	if (pid == 0) {
 #if JOB_PROTECT
 		/* job control safe version: put it in a new pgroup. */
@@ -57,7 +57,7 @@ PRIM(background) {
 
 PRIM(fork) {
 	int pid, status;
-	pid = efork(TRUE, FALSE);
+	pid = efork(TRUE);
 	if (pid == 0)
 		exit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));
 	status = ewaitfor(pid);
@@ -90,7 +90,7 @@ static List *forkexec(char *file, List *list, Boolean inchild) {
 	Vector *env;
 	gcdisable();
 	env = mkenv();
-	pid = efork(!inchild, FALSE);
+	pid = efork(!inchild);
 	if (pid == 0) {
 		execve(file, vectorize(list)->vector, env->vector);
 		failexec(file, list);
@@ -348,7 +348,7 @@ PRIM(time) {
 
 	gc();	/* do a garbage collection first to ensure reproducible results */
 	t0 = time(NULL);
-	pid = efork(TRUE, FALSE);
+	pid = efork(TRUE);
 	if (pid == 0)
 		exit(exitstatus(eval(lp, NULL, evalflags | eval_inchild)));
 	status = ewait(pid, FALSE, &r);
@@ -373,7 +373,7 @@ PRIM(time) {
 	Ref(List *, lp, list);
 
 	gc();	/* do a garbage collection first to ensure reproducible results */
-	pid = efork(TRUE, FALSE);
+	pid = efork(TRUE);
 	if (pid == 0) {
 		clock_t t0, t1;
 		struct tms tms;
@@ -383,7 +383,7 @@ PRIM(time) {
 			ticks = sysconf(_SC_CLK_TCK);
 
 		t0 = times(&tms);
-		pid = efork(TRUE, FALSE);
+		pid = efork(TRUE);
 		if (pid == 0)
 			exit(exitstatus(eval(lp, NULL, evalflags | eval_inchild)));
 

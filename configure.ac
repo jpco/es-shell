@@ -94,7 +94,7 @@ AC_PROG_GCC_TRADITIONAL
 AC_FUNC_MMAP
 
 AC_CHECK_FUNCS(strerror strtol lstat setrlimit sigrelse sighold sigaction \
-sysconf setsid sigsetjmp getrusage waitpid)
+sysconf sigsetjmp getrusage waitpid)
 
 AC_CACHE_CHECK(for an abused getenv, es_cv_abused_getenv,
 AC_RUN_IFELSE([AC_LANG_SOURCE([[
