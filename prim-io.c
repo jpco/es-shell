@@ -3,6 +3,7 @@
 #include "es.h"
 #include "gc.h"
 #include "prim.h"
+#include "proc.h"
 
 static const char *caller;
 
@@ -204,7 +205,7 @@ PRIM(pipe) {
 
 	for (;; list = list->next) {
 		int p[2], pid;
-		
+
 		pid = (list->next == NULL) ? efork(TRUE) : pipefork(p, &inpipe);
 
 		if (pid == 0) {		/* child */
@@ -232,12 +233,14 @@ PRIM(pipe) {
 	}
 
 	Ref(List *, result, NULL);
-	do {
+	if (forkjob != NULL) {
+		result = ewaitfor(pids[0]);
+	} else do {
 		Ref(List *, status, ewaitfor(pids[--n]));
-		printstatus(0, status);
 		result = append(status, result);
 		RefEnd(status);
 	} while (0 < n);
+	printstatus(0, result);
 	if (evalflags & eval_inchild)
 		exit(exitstatus(result));
 	RefReturn(result);

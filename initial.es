@@ -581,6 +581,22 @@ if {~ <=$&primitives execfailure} {fn-%exec-failure = $&execfailure}
 
 
 #
+# Job control
+#
+
+#	Job control in es is enabled through the use of two built-ins:
+#	the job-control variable and the %make-job built-in.
+
+job-control	= uninitialized
+set-job-control	= $&setjobcontrol
+
+fn-%make-job	= $&makejob
+fn-%run		= %make-job $&run
+fn-%pipe	= %make-job $&pipe
+fn-%background	= %make-job $&background
+
+
+#
 # Read-eval-print loops
 #
 
@@ -631,6 +647,7 @@ fn-%batch-loop	= $&batchloop
 fn-%is-interactive = $&isinteractive
 
 fn %interactive-loop {
+	local (job-control = <=true)
 	let (result = <=true) {
 		catch @ e type msg {
 			if {~ $e eof} {

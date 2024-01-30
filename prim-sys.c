@@ -4,6 +4,7 @@
 
 #include "es.h"
 #include "prim.h"
+#include "proc.h"
 
 #ifdef HAVE_SETRLIMIT
 # define BSD_LIMITS 1
@@ -46,8 +47,9 @@ PRIM(background) {
 	int pid = efork(TRUE);
 	if (pid == 0) {
 #if JOB_PROTECT
-		/* job control safe version: put it in a new pgroup. */
-		setpgrp(0, getpid());
+		/* job control safe version: put it in a new pgroup if it isn't already. */
+		if (forkjob == NULL)
+			setpgrp(0, getpid());
 #endif
 		mvfd(eopen("/dev/null", oOpen), 0);
 		exit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));

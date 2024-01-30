@@ -43,6 +43,7 @@ extern void initprims(void) {
 
 	prims = initprims_controlflow(prims);
 	prims = initprims_io(prims);
+	prims = initprims_jobcontrol(prims);
 	prims = initprims_etc(prims);
 	prims = initprims_sys(prims);
 	prims = initprims_proc(prims);

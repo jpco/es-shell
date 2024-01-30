@@ -1,6 +1,7 @@
 /* proc.c -- process control system calls ($Revision: 1.2 $) */
 
 #include "es.h"
+#include "proc.h"
 
 /* TODO: the rusage code for the time builtin really needs to be cleaned up */
 
@@ -10,33 +11,8 @@
 #endif
 
 Boolean hasforked = FALSE;
-
-typedef struct Proc Proc;
-typedef struct Job Job;
-
-struct Proc {
-	int pid;
-	int status;
-	Boolean alive;
-	Proc *next, *prev;
-	Job *job;
-#if HAVE_GETRUSAGE
-	struct rusage rusage;
-#endif
-};
-
-struct Job {
-	int pgid;
-	Boolean alive;
-	Proc *proclist;
-	Job *next, *prev;
-};
-
-/* processes which are not grouped under jobs, and are in the shell's pgrp. */
-static Proc *proclist = NULL;
-
-/* processes grouped under jobs, running in the jobs' pgrps. */
-static Job *joblist = NULL;
+Proc *proclist = NULL;
+Job *joblist = NULL;
 
 /* mkproc -- create a Proc structure */
 static Proc *mkproc(int pid, Job *job) {
@@ -80,17 +56,43 @@ static Job *mkjob(int pgid) {
 /* efork -- fork (if necessary) and clean up as appropriate */
 extern int efork(Boolean parent) {
 	if (parent) {
-		int pid = fork();
+		int pid;
+		Job *job = (forkjob == NULL ? NULL : forkjob->job);
+
+		pid = fork();
 		switch (pid) {
 		default: {	/* parent */
-			Proc *proc = mkproc(pid, NULL);
-			if (proclist != NULL)
-				proclist->prev = proc;
-			proclist = proc;
+			Proc *proc;
+			if (job == NULL && forkjob != NULL) {
+				forkjob->job = mkjob(pid);
+				job = forkjob->job;
+				if (joblist != NULL)
+					joblist->prev = job;
+				joblist = job;
+			}
+			proc = mkproc(pid, job);
+
+			if (job != NULL) {
+				if (setpgrp(pid, job->pgid) < 0)
+					fail("es:efork", "setpgrp: %s", esstrerror(errno));
+				if (job->proclist != NULL)
+					job->proclist->prev = proc;
+				job->proclist = proc;
+			} else {
+				if (proclist != NULL)
+					proclist->prev = proc;
+				proclist = proc;
+			}
 			return pid;
 		}
 		case 0:		/* child */
+			if (forkjob != NULL)
+				if (setpgrp(0, (job != NULL ? job->pgid : getpid())) < 0) {
+					eprint("child setpgrp: %s", esstrerror(errno));
+					exit(1);
+				}
 			proclist = NULL;
+			joblist = NULL;
 			hasforked = TRUE;
 			break;
 		case -1:
@@ -307,12 +309,12 @@ extern List *ewait(int pid, Boolean interruptible, void *rusage) {
 		if (scanjob(proc->job)) {
 			Proc *p;
 #if HAVE_GETRUSAGE
+			/* FIXME: do we need to run a getrusage at the top to "clear" the getrusage state? */
 			if (rusage != NULL)
 				getrusage(RUSAGE_CHILDREN, rusage);
 #else
 			assert(rusage == NULL);
 #endif
-			/* FIXME: is this backwards? */
 			for (p = proc->job->proclist; p != NULL; p = p->next)
 				lp = mklist(mkstr(mkstatus(p->status)), lp);
 			freejob(proc->job);
@@ -326,13 +328,19 @@ extern List *ewait(int pid, Boolean interruptible, void *rusage) {
 
 PRIM(apids) {
 	Proc *p;
+	Job *j;
 	Ref(List *, lp, NULL);
 	for (p = proclist; p != NULL; p = p->next)
 		if (p->alive) {
 			Term *t = mkstr(str("%d", p->pid));
 			lp = mklist(t, lp);
 		}
-	/* TODO: sort the return value, but by number? */
+	for (j = joblist; j != NULL; j = j->next)
+		if (j->alive) {
+			Term *t = mkstr(str("%d", -j->pgid));
+			lp = mklist(t, lp);
+		}
+	/* TODO: sort by absolute value */
 	RefReturn(lp);
 }
 
@@ -342,10 +350,6 @@ PRIM(wait) {
 		pid = 0;
 	else if (list->next == NULL) {
 		pid = atoi(getstr(list->term));
-		if (pid <= 0) {
-			fail("$&wait", "wait: %d: bad pid", pid);
-			NOTREACHED;
-		}
 	} else {
 		fail("$&wait", "usage: wait [pid]");
 		NOTREACHED;
