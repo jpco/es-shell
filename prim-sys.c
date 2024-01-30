@@ -46,12 +46,15 @@ PRIM(newpgrp) {
 PRIM(background) {
 	int pid = efork(TRUE);
 	if (pid == 0) {
+		if (forkjob == NULL) {
 #if JOB_PROTECT
-		/* job control safe version: put it in a new pgroup if it isn't already. */
-		if (forkjob == NULL)
+			/* job control safety: put it in a new pgroup if it isn't already. */
 			setpgrp(0, getpid());
 #endif
-		mvfd(eopen("/dev/null", oOpen), 0);
+			/* FIXME: is this necessary? maybe it is with setsid()
+			 * or if we want to pretend SIGTTIN doesn't exist */
+			mvfd(eopen("/dev/null", oOpen), 0);
+		}
 		exit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));
 	}
 	return mklist(mkstr(str("%d", pid)), NULL);
@@ -161,9 +164,10 @@ PRIM(setsignals) {
 		const char *s = getstr(lp->term);
 		Sigeffect effect = sig_catch;
 		switch (*s) {
-		case '-':	effect = sig_ignore;	s++; break;
-		case '/':	effect = sig_noop;	s++; break;
-		case '.':	effect = sig_special;	s++; break;
+		case '-':	effect = sig_ignore;		s++; break;
+		case '/':	effect = sig_noop;		s++; break;
+		case '.':	effect = sig_special;		s++; break;
+		case '+':	effect = sig_pgrp_ignore;	s++; break;
 		}
 		sig = signumber(s);
 		if (sig < 0)
@@ -354,7 +358,7 @@ PRIM(time) {
 	pid = efork(TRUE);
 	if (pid == 0)
 		exit(exitstatus(eval(lp, NULL, evalflags | eval_inchild)));
-	status = ewait(pid, FALSE, &r);
+	status = ewait(pid, FALSE, FALSE, &r);
 	t1 = time(NULL);
 	SIGCHK();
 	printstatus(0, status);

@@ -223,8 +223,8 @@ extern char *checkexecutable(char *file);
 
 extern Boolean hasforked;
 extern int efork(Boolean parent);
-extern List *ewait(int pid, Boolean interruptible, void *rusage);
-#define	ewaitfor(pid)	ewait(pid, FALSE, NULL)
+extern List *ewait(int pid, Boolean interruptible, Boolean cont, void *rusage);
+#define	ewaitfor(pid)	ewait(pid, FALSE, FALSE, NULL)
 
 
 /* dict.c */
@@ -334,7 +334,7 @@ extern char *sigmessage(int sig);
 
 #define	SIGCHK() sigchk()
 typedef enum {
-	sig_nochange, sig_catch, sig_default, sig_ignore, sig_noop, sig_special
+	sig_nochange, sig_catch, sig_default, sig_ignore, sig_noop, sig_special, sig_pgrp_ignore
 } Sigeffect;
 extern Sigeffect esignal(int sig, Sigeffect effect);
 extern void setsigeffects(const Sigeffect effects[]);
@@ -346,7 +346,7 @@ extern jmp_buf slowlabel;
 extern Boolean termsig_newline;
 extern void sigchk(void);
 extern Boolean issilentsignal(List *e);
-extern void setsigdefaults(void);
+extern void setsigdefaults(Boolean newpgrp);
 extern void blocksignals(void);
 extern void unblocksignals(void);
 

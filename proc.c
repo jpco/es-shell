@@ -29,6 +29,7 @@ static Proc *mkproc(int pid, Job *job) {
 	}
 	proc->pid = pid;
 	proc->alive = TRUE;
+	proc->stopped = FALSE;
 	proc->prev = NULL;
 	proc->job = job;
 	return proc;
@@ -48,6 +49,7 @@ static Job *mkjob(int pgid) {
 	}
 	job->pgid = pgid;
 	job->alive = TRUE;
+	job->stopped = FALSE;
 	job->proclist = NULL;
 	job->prev = NULL;
 	return job;
@@ -55,6 +57,7 @@ static Job *mkjob(int pgid) {
 
 /* efork -- fork (if necessary) and clean up as appropriate */
 extern int efork(Boolean parent) {
+	Boolean newpgrp = FALSE;
 	if (parent) {
 		int pid;
 		Job *job = (forkjob == NULL ? NULL : forkjob->job);
@@ -73,6 +76,7 @@ extern int efork(Boolean parent) {
 			proc = mkproc(pid, job);
 
 			if (job != NULL) {
+				newpgrp = TRUE;
 				if (setpgrp(pid, job->pgid) < 0)
 					fail("es:efork", "setpgrp: %s", esstrerror(errno));
 				if (job->proclist != NULL)
@@ -86,11 +90,13 @@ extern int efork(Boolean parent) {
 			return pid;
 		}
 		case 0:		/* child */
-			if (forkjob != NULL)
+			if (forkjob != NULL) {
+				newpgrp = TRUE;
 				if (setpgrp(0, (job != NULL ? job->pgid : getpid())) < 0) {
 					eprint("child setpgrp: %s", esstrerror(errno));
 					exit(1);
 				}
+			}
 			proclist = NULL;
 			joblist = NULL;
 			hasforked = TRUE;
@@ -100,19 +106,22 @@ extern int efork(Boolean parent) {
 		}
 	}
 	closefds();
-	setsigdefaults();
+	setsigdefaults(newpgrp);
 	newchildcatcher();
 	return 0;
 }
 
-/* reap -- mark a process as dead and attach its exit status */
+/* reap -- mark a process as dead or stopped and attach its exit status */
 static Proc *reap(int pid, int status) {
 	Proc *proc;
 	Job *job;
 	for (proc = proclist; proc != NULL; proc = proc->next)
 		if (proc->pid == pid) {
 			assert(proc->alive);
-			proc->alive = FALSE;
+			if (SIFSTOPPED(status))
+				proc->stopped = TRUE;
+			else
+				proc->alive = FALSE;
 			proc->status = status;
 			return proc;
 		}
@@ -120,23 +129,30 @@ static Proc *reap(int pid, int status) {
 		for (proc = job->proclist; proc != NULL; proc = proc->next)
 			if (proc->pid == pid) {
 				assert(proc->alive);
-				proc->alive = FALSE;
+				if (SIFSTOPPED(status))
+					proc->stopped = TRUE;
+				else
+					proc->alive = FALSE;
 				proc->status = status;
 				return proc;
 			}
 	return NULL;
 }
 
-/* Scan a Job and return true if all its Procs are dead. */
+/* Scan a Job and return true if all its Procs are dead or stopped. */
 static Boolean scanjob(Job *job) {
 	Proc *proc;
 	Boolean alive = FALSE;
+	Boolean stopped = TRUE;
 	for (proc = job->proclist; proc != NULL; proc = proc->next) {
 		if (proc->alive)
 			alive = TRUE;
+		if (!proc->stopped)
+			stopped = FALSE;
 	}
 	job->alive = alive;
-	return !alive;
+	job->stopped = stopped;
+	return (!alive || stopped);
 }
 
 /* Free a Proc which is in proclist. */
@@ -252,29 +268,73 @@ static int dowaitpid(int pid, int *statusp, int opts) {
 	return n;
 }
 
-/* If the pid is in a job pgid, return the job's pgid.  Otherwise return 0. */
-static int pidtopgid(int pid) {
+/* If the pid is in a job pgid, or is a -pgid itself, return the job's pgid.
+ * Otherwise return 0. */
+extern int pidtopgid(int pid) {
 	Job *job;
 	Proc *proc;
-	for (job = joblist; job != NULL; job = job->next)
+	for (job = joblist; job != NULL; job = job->next) {
+		if (-pid == job->pgid)
+			return job->pgid;
 		for (proc = job->proclist; proc != NULL; proc = proc->next)
 			if (proc->pid == pid)
 				return job->pgid;
+	}
 	return 0;
 }
 
 /* ewait -- wait for a specific process to die, or any process if pid == 0 */
-extern List *ewait(int pid, Boolean interruptible, void *rusage) {
+/* FIXME: clean this whole mess up.  Surely, there's a better way. */
+extern List *ewait(int pid, Boolean interruptible, Boolean cont, void *rusage) {
 	Proc *proc;
-	int pgid, status, deadpid = 0;
+	Job *job;
 
-	if ((pgid = pidtopgid(pid)) > 0)
+	int pgid, status, deadpid = 0;
+	int espgid = 0;
+
+	if ((pgid = pidtopgid(pid)) > 0) {
 		pid = -pgid;
+		espgid = getpgrp();
+		/* Do the continue after the tcsetpgrp, for race-prevention reasons. */
+		tcsetpgrp(0, pgid);
+		if (cont)
+			if (kill(pid, SIGCONT) < 0)
+				fail("$&fgjob", "continue: %s", esstrerror(errno));
+	}
 
 	Ref(List *, lp, NULL);
 	while (true) {
+		/* FIXME: `ewait(0, ..., TRUE, ...)` doesn't work */
+		for (proc = proclist; proc != NULL; proc = proc->next)
+			if (proc->pid == pid) {
+				if (proc->stopped) {
+					if (cont) {
+						proc->stopped = FALSE;
+					} else {
+						lp = mklist(mkstr(mkstatus(proc->status)), NULL);
+						goto cleanup;
+					}
+				}
+				break;
+			}
+
+		for (job = joblist; job != NULL; job = job->next)
+			if (job->pgid == -pid) {
+				if (job->stopped) {
+					if (cont) {
+						job->stopped = FALSE;
+					} else {
+						for (proc = job->proclist; proc != NULL; proc = proc->next)
+							lp = mklist(mkstr(mkstatus(proc->status)), lp);
+						goto cleanup;
+					}
+				}
+				break;
+			}
+
 		Boolean seen_eintr = FALSE;
 		/* Hack pid 0 to -1: background procs may have been setpgid/setsid elsewhere */
+		/* FIXME: Don't wait for something that's already been stopped! */
 		while ((deadpid = dowaitpid(pid == 0 ? -1 : pid, &status, WUNTRACED)) == -1)
 			if (errno == EINTR) {
 				if (interruptible)
@@ -284,42 +344,58 @@ extern List *ewait(int pid, Boolean interruptible, void *rusage) {
 				/* TODO: not clear on why this is necessary
 				 * (sometimes child procs disappear after SIGINT) */
 				break;
-			else {
+			else
 				fail("es:ewait", "wait: %s", esstrerror(errno));
-			}
 
 		proc = reap(deadpid, status);
 
 		if (proc->job == NULL) {
+			if (!proc->alive) {
 #if HAVE_GETRUSAGE
-			if (rusage != NULL)
+				if (rusage != NULL)
 #if HAVE_WAITPID
-				getrusage(RUSAGE_CHILDREN, rusage);
+					getrusage(RUSAGE_CHILDREN, rusage);
 #else
-				memcpy(rusage, &proc->rusage, sizeof (struct rusage));
+					memcpy(rusage, &proc->rusage, sizeof (struct rusage));
 #endif
 #else
-			assert(rusage == NULL);
+				assert(rusage == NULL);
 #endif
+			}
 			lp = mklist(mkstr(mkstatus(proc->status)), NULL);
-			freeproc(proc);
+			if (!proc->alive)
+				freeproc(proc);
 			break;
 		}
 
 		if (scanjob(proc->job)) {
 			Proc *p;
+			if (!proc->job->alive) {
 #if HAVE_GETRUSAGE
-			/* FIXME: do we need to run a getrusage at the top to "clear" the getrusage state? */
-			if (rusage != NULL)
-				getrusage(RUSAGE_CHILDREN, rusage);
+				/* FIXME: do we need to run a getrusage at the top to "clear" it? */
+				if (rusage != NULL)
+					getrusage(RUSAGE_CHILDREN, rusage);
 #else
-			assert(rusage == NULL);
+				assert(rusage == NULL);
 #endif
+			}
 			for (p = proc->job->proclist; p != NULL; p = p->next)
 				lp = mklist(mkstr(mkstatus(p->status)), lp);
-			freejob(proc->job);
+			if (!proc->job->alive)
+				freejob(proc->job);
 			break;
 		}
+	}
+cleanup:
+	if (espgid) {
+		Sigeffect tstp, ttin, ttou;
+		tstp = esignal(SIGTSTP, sig_ignore);
+		ttin = esignal(SIGTTIN, sig_ignore);
+		ttou = esignal(SIGTTOU, sig_ignore);
+		tcsetpgrp(0, espgid);
+		esignal(SIGTSTP, tstp);
+		esignal(SIGTTIN, ttin);
+		esignal(SIGTTOU, ttou);
 	}
 	RefReturn(lp);
 }
@@ -354,7 +430,7 @@ PRIM(wait) {
 		fail("$&wait", "usage: wait [pid]");
 		NOTREACHED;
 	}
-	Ref(List *, status, ewait(pid, TRUE, NULL));
+	Ref(List *, status, ewait(pid, TRUE, FALSE, NULL));
 	printstatus(pid, status);
 	RefReturn(status);
 }

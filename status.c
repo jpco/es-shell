@@ -54,7 +54,11 @@ extern int exitstatus(List *status) {
 
 /* mkstatus -- turn a unix exit(2) status into a string */
 extern char *mkstatus(int status) {
-	if (SIFSIGNALED(status)) {
+	if (SIFSTOPPED(status)) {
+		char *name = signame(SSTOPSIG(status));
+		return name;
+	}
+	if (SIFSTOPPED(status) || SIFSIGNALED(status)) {
 		char *name = signame(STERMSIG(status));
 		if (SCOREDUMP(status))
 			name = str("%s+core", name);

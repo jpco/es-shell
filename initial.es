@@ -584,8 +584,8 @@ if {~ <=$&primitives execfailure} {fn-%exec-failure = $&execfailure}
 # Job control
 #
 
-#	Job control in es is enabled through the use of two built-ins:
-#	the job-control variable and the %make-job built-in.
+#	Job control in es is primarily enabled through the use of two
+#	primitives: $&setjobcontrol and $&makejob.
 
 job-control	= uninitialized
 set-job-control	= $&setjobcontrol
@@ -594,6 +594,9 @@ fn-%make-job	= $&makejob
 fn-%run		= %make-job $&run
 fn-%pipe	= %make-job $&pipe
 fn-%background	= %make-job $&background
+
+fn-fg	= $&fgjob
+fn-bg	= $&bgjob
 
 
 #
@@ -647,7 +650,10 @@ fn-%batch-loop	= $&batchloop
 fn-%is-interactive = $&isinteractive
 
 fn %interactive-loop {
-	local (job-control = <=true)
+	local (
+		signals		= ($signals +sigtstp +sigttin +sigttou)
+		job-control	= <=true
+	)
 	let (result = <=true) {
 		catch @ e type msg {
 			if {~ $e eof} {
@@ -658,7 +664,7 @@ fn %interactive-loop {
 				echo >[1=2] $msg
 				$fn-%dispatch false
 			} {~ $e signal} {
-				if {!~ $type sigint sigterm sigtstp sigquit} {
+				if {!~ $type sigint sigterm sigquit} {
 					echo >[1=2] caught unexpected signal: $type
 				}
 			} {
@@ -761,7 +767,7 @@ max-eval-depth	= 640
 #	is does.  fn-%dispatch is really only important to the current
 #	interpreter loop.
 
-noexport = noexport pid signals apid bqstatus fn-%dispatch path home matchexpr
+noexport = noexport pid signals apid bqstatus fn-%dispatch path home matchexpr job-control
 
 
 #

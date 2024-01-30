@@ -11,7 +11,7 @@ typedef struct Job Job;
 struct Proc {
 	int pid;
 	int status;
-	Boolean alive;
+	Boolean alive, stopped;
 	Proc *next, *prev;
 	Job *job;
 #if HAVE_GETRUSAGE
@@ -21,12 +21,12 @@ struct Proc {
 
 struct Job {
 	int pgid;
-	Boolean alive;
+	Boolean alive, stopped;
 	Proc *proclist;
 	Job *next, *prev;
 };
 
-/* processes which are not grouped under jobs, and are in the shell's pgrp. */
+/* processes which are not grouped under jobs and are mostly in the shell pgrp. */
 extern Proc *proclist;
 
 /* processes grouped under jobs, running in the jobs' pgrps. */
@@ -44,3 +44,5 @@ extern Boolean jobcontrol;
 
 /* Are we in a forked child process? */
 extern Boolean hasforked;
+
+extern int pidtopgid(int);

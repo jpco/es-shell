@@ -297,10 +297,12 @@ extern int getgroups(int, int *);
  *	terms of the W* forms.
  */
 
-#define	SIFSIGNALED(status)	(((status) & 0xff) != 0)
+#define	SIFSIGNALED(status)	(!SIFSTOPPED(status) && !SIFEXITED(status))
 #define	STERMSIG(status)	((status) & 0x7f)
 #define	SCOREDUMP(status)	((status) & 0x80)
-#define	SIFEXITED(status)	(!SIFSIGNALED(status))
+
+#define	SIFEXITED(status)	(((status) & 0xff) == 0)
 #define	SEXITSTATUS(status)	(((status) >> 8) & 0xff)
 
-
+#define	SIFSTOPPED(status)	(((status) & 0x7f) == 0x7f)
+#define	SSTOPSIG(status)	(((status) >> 8) & 0xff)

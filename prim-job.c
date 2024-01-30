@@ -120,8 +120,43 @@ PRIM(makejob) {
 	return list;
 }
 
+/* FIXME: is it bad to send a SIGCONT to a job that's already running?
+ * (i.e., we background a job then foreground it while it's running in bg */
+PRIM(fgjob) {
+	int pid, pgid;
+	if (list == NULL || (list->next != NULL && list->next->next != NULL))
+		fail("$&fgjob", "usage: fgjob pid");
+	else
+		pid = atoi(getstr(list->term));
+
+	if ((pgid = pidtopgid(pid)) == 0)
+		fail("$&fgjob", "%d is not in a child pgrp of this shell", pid);
+
+	Ref(List *, status, ewait(pgid, TRUE, TRUE, NULL));
+	printstatus(0, status);
+	RefReturn(status);
+}
+
+PRIM(bgjob) {
+	int pid, pgid;
+	if (list == NULL || (list->next != NULL && list->next->next != NULL))
+		fail("$&bgjob", "usage: bgjob pid");
+	else
+		pid = atoi(getstr(list->term));
+
+	if ((pgid = pidtopgid(pid)) == 0)
+		fail("$&bgjob", "%d is not in a child pgrp of this shell", pid);
+
+	if (kill(-pgid, SIGCONT) < 0)
+		fail("$&bgjob", "continue: %s", esstrerror(errno));
+
+	return true;
+}
+
 extern Dict *initprims_jobcontrol(Dict *primdict) {
 	X(setjobcontrol);
 	X(makejob);
+	X(fgjob);
+	X(bgjob);
 	return primdict;
 }
