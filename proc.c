@@ -12,34 +12,69 @@
 Boolean hasforked = FALSE;
 
 typedef struct Proc Proc;
+typedef struct Job Job;
+
 struct Proc {
 	int pid;
 	int status;
 	Boolean alive;
 	Proc *next, *prev;
+	Job *job;
 #if HAVE_GETRUSAGE
 	struct rusage rusage;
 #endif
 };
 
+struct Job {
+	int pgid;
+	Boolean alive;
+	Proc *proclist;
+	Job *next, *prev;
+};
+
+/* processes which are not grouped under jobs, and are in the shell's pgrp. */
 static Proc *proclist = NULL;
 
+/* processes grouped under jobs, running in the jobs' pgrps. */
+static Job *joblist = NULL;
+
 /* mkproc -- create a Proc structure */
-static Proc *mkproc(int pid) {
+static Proc *mkproc(int pid, Job *job) {
 	Proc *proc;
-	for (proc = proclist; proc != NULL; proc = proc->next)
+	Proc *list = (job == NULL ? proclist : job->proclist);
+	for (proc = list; proc != NULL; proc = proc->next)
 		if (proc->pid == pid) {		/* are we recycling pids? */
 			assert(!proc->alive);	/* if false, violates unix semantics */
 			break;
 		}
 	if (proc == NULL) {
 		proc = ealloc(sizeof (Proc));
-		proc->next = proclist;
+		proc->next = list;
 	}
 	proc->pid = pid;
 	proc->alive = TRUE;
 	proc->prev = NULL;
+	proc->job = job;
 	return proc;
+}
+
+/* mkjob -- create a Job structure */
+static Job *mkjob(int pgid) {
+	Job *job;
+	for (job = joblist; job != NULL; job = job->next)
+		if (job->pgid == pgid) {
+			assert(!job->alive);
+			break;
+		}
+	if (job == NULL) {
+		job = ealloc(sizeof (Job));
+		job->next = joblist;
+	}
+	job->pgid = pgid;
+	job->alive = TRUE;
+	job->proclist = NULL;
+	job->prev = NULL;
+	return job;
 }
 
 /* efork -- fork (if necessary) and clean up as appropriate */
@@ -48,7 +83,7 @@ extern int efork(Boolean parent) {
 		int pid = fork();
 		switch (pid) {
 		default: {	/* parent */
-			Proc *proc = mkproc(pid);
+			Proc *proc = mkproc(pid, NULL);
 			if (proclist != NULL)
 				proclist->prev = proc;
 			proclist = proc;
@@ -71,40 +106,88 @@ extern int efork(Boolean parent) {
 /* reap -- mark a process as dead and attach its exit status */
 static Proc *reap(int pid, int status) {
 	Proc *proc;
-#if HAVE_GETRUSAGE
-	struct rusage rusage;
-	getrusage(RUSAGE_CHILDREN, &rusage);
-#endif
+	Job *job;
 	for (proc = proclist; proc != NULL; proc = proc->next)
 		if (proc->pid == pid) {
 			assert(proc->alive);
 			proc->alive = FALSE;
 			proc->status = status;
-#if HAVE_GETRUSAGE
-			proc->rusage = rusage;
-#endif
 			return proc;
 		}
+	for (job = joblist; job != NULL; job = job->next)
+		for (proc = job->proclist; proc != NULL; proc = proc->next)
+			if (proc->pid == pid) {
+				assert(proc->alive);
+				proc->alive = FALSE;
+				proc->status = status;
+				return proc;
+			}
 	return NULL;
 }
 
-static void unlist(Proc *proc, Proc **list) {
-	assert(proc != NULL && list != NULL);
+/* Scan a Job and return true if all its Procs are dead. */
+static Boolean scanjob(Job *job) {
+	Proc *proc;
+	Boolean alive = FALSE;
+	for (proc = job->proclist; proc != NULL; proc = proc->next) {
+		if (proc->alive)
+			alive = TRUE;
+	}
+	job->alive = alive;
+	return !alive;
+}
+
+/* Free a Proc which is in proclist. */
+static int freeproc(Proc *proc) {
+	int pid;
+	assert(proc != NULL);
+	pid = proc->pid;
 	if (proc->next != NULL)
 		proc->next->prev = proc->prev;
 	if (proc->prev != NULL)
 		proc->prev->next = proc->next;
 	else
-		*list = proc->next;
+		proclist = proc->next;
+
+	efree(proc);
+	return pid;
+}
+
+/* Free a Job which is in joblist, and the Procs it contains. */
+static int freejob(Job *job) {
+	int pgid;
+	Proc *proc;
+	assert(job != NULL);
+	pgid = job->pgid;
+
+	for (proc = job->proclist; proc != NULL; proc = proc->next)
+		efree(proc);
+
+	if (job->next != NULL)
+		job->next->prev = job->prev;
+
+	if (job->prev != NULL)
+		job->prev->next = job->next;
+	else
+		joblist = job->next;
+
+	efree(job);
+
+	return pgid;
 }
 
 #if !HAVE_WAITPID
 
 /* Limited imitation of waitpid().  Can't power job control, and marks some
- * background procs as dead earlier than the real one does, but that's ok. */
+ * background procs as dead earlier than the real one does, but that's ok.
+ * Because it wait()s for wrong children, it needs to manage some rusages
+ * itself. */
 static int fakewaitpid(int pid, int *statusp, int opts) {
 	int deadpid, status;
 	Proc *p;
+#if HAVE_GETRUSAGE
+	struct rusage rusage;
+#endif
 
 	if (pid < -1 || (opts != 0 && opts != WUNTRACED)) {
 		errno = EINVAL;
@@ -119,23 +202,28 @@ static int fakewaitpid(int pid, int *statusp, int opts) {
 				p->alive = TRUE;
 				return p->pid;
 			}
-		return wait(statusp);
+		deadpid = wait(&status);
 	}
 
 	while ((deadpid = wait(&status)) != pid) {
 		if (deadpid == -1)
 			return deadpid;
-		for (p = proclist; p != NULL; p = p->next)
-			if (p->pid == deadpid) {
-				p->alive = FALSE;
-				p->status = status;
-				break;
-			}
-		assert(p != NULL);
 	}
 
+	for (p = proclist; p != NULL; p = p->next)
+		if (p->pid == deadpid) {
+			break;
+		}
+	assert(p != NULL);
+
+	p->alive = FALSE;
+	p->status = status;
+#if HAVE_GETRUSAGE
+	getrusage(RUSAGE_CHILDREN, &rusage);
+	p->rusage = rusage;
+#endif
 	*statusp = status;
-	return pid;
+	return deadpid;
 }
 
 #endif
@@ -162,34 +250,76 @@ static int dowaitpid(int pid, int *statusp, int opts) {
 	return n;
 }
 
+/* If the pid is in a job pgid, return the job's pgid.  Otherwise return 0. */
+static int pidtopgid(int pid) {
+	Job *job;
+	Proc *proc;
+	for (job = joblist; job != NULL; job = job->next)
+		for (proc = job->proclist; proc != NULL; proc = proc->next)
+			if (proc->pid == pid)
+				return job->pgid;
+	return 0;
+}
+
 /* ewait -- wait for a specific process to die, or any process if pid == 0 */
 extern List *ewait(int pid, Boolean interruptible, void *rusage) {
 	Proc *proc;
-	int deadpid, status;
-	Boolean seen_eintr = FALSE;
-	/* Hack pid to -1: background procs may have been setpgid/setsid elsewhere */
-	while ((deadpid = dowaitpid(pid == 0 ? -1 : pid, &status, WUNTRACED)) == -1)
-		if (errno == EINTR) {
-			if (interruptible)
-				SIGCHK();
-			seen_eintr = TRUE;
-		} else if (errno == ECHILD && seen_eintr)
-			/* TODO: not clear on why this is necessary
-			 * (sometimes child procs disappear after SIGINT) */
-			break;
-		else
-			fail("es:ewait", "wait: %s", esstrerror(errno));
+	int pgid, status, deadpid = 0;
 
-	proc = reap(deadpid, status);
-	unlist(proc, &proclist);
+	if ((pgid = pidtopgid(pid)) > 0)
+		pid = -pgid;
+
+	Ref(List *, lp, NULL);
+	while (true) {
+		Boolean seen_eintr = FALSE;
+		/* Hack pid 0 to -1: background procs may have been setpgid/setsid elsewhere */
+		while ((deadpid = dowaitpid(pid == 0 ? -1 : pid, &status, WUNTRACED)) == -1)
+			if (errno == EINTR) {
+				if (interruptible)
+					SIGCHK();
+				seen_eintr = TRUE;
+			} else if (errno == ECHILD && seen_eintr)
+				/* TODO: not clear on why this is necessary
+				 * (sometimes child procs disappear after SIGINT) */
+				break;
+			else {
+				fail("es:ewait", "wait: %s", esstrerror(errno));
+			}
+
+		proc = reap(deadpid, status);
+
+		if (proc->job == NULL) {
 #if HAVE_GETRUSAGE
-	if (rusage != NULL)
-		memcpy(rusage, &proc->rusage, sizeof (struct rusage));
+			if (rusage != NULL)
+#if HAVE_WAITPID
+				getrusage(RUSAGE_CHILDREN, rusage);
 #else
-	assert(rusage == NULL);
+				memcpy(rusage, &proc->rusage, sizeof (struct rusage));
 #endif
-	efree(proc);
-	return mklist(mkstr(mkstatus(status)), NULL);
+#else
+			assert(rusage == NULL);
+#endif
+			lp = mklist(mkstr(mkstatus(proc->status)), NULL);
+			freeproc(proc);
+			break;
+		}
+
+		if (scanjob(proc->job)) {
+			Proc *p;
+#if HAVE_GETRUSAGE
+			if (rusage != NULL)
+				getrusage(RUSAGE_CHILDREN, rusage);
+#else
+			assert(rusage == NULL);
+#endif
+			/* FIXME: is this backwards? */
+			for (p = proc->job->proclist; p != NULL; p = p->next)
+				lp = mklist(mkstr(mkstatus(p->status)), lp);
+			freejob(proc->job);
+			break;
+		}
+	}
+	RefReturn(lp);
 }
 
 #include "prim.h"
