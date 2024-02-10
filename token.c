@@ -3,7 +3,7 @@
 #include "es.h"
 #include "input.h"
 #include "syntax.h"
-#include "token.h"
+#include "parse.h"
 
 #define	isodigit(c)	('0' <= (c) && (c) < '8')
 
@@ -17,8 +17,9 @@ static Boolean newline = FALSE;
 static Boolean goterror = FALSE;
 static size_t bufsize = 0;
 static char *tokenbuf = NULL;
+Token token;
 
-#define	InsertFreeCaret()	STMT(if (w != NW) { w = NW; UNGETC(c); return '^'; })
+#define	InsertFreeCaret()	STMT(if (w != NW) { w = NW; UNGETC(c); return CARET; })
 
 
 /*
@@ -149,7 +150,7 @@ extern int yylex(void) {
 	size_t i;			/* The purpose of all these local assignments is to	*/
 	const char *meta;		/* allow optimizing compilers like gcc to load these	*/
 	char *buf = tokenbuf;		/* values into registers. On a sparc this is a		*/
-	YYSTYPE *y = &yylval;		/* win, in code size *and* execution time		*/
+	Token *y = &token;		/* win, in code size *and* execution time		*/
 
 	if (goterror) {
 		goterror = FALSE;
@@ -182,8 +183,10 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 		w = KW;
 		if (buf[1] == '\0') {
 			int k = *buf;
-			if (k == '@' || k == '~')
-				return k;
+			if (k == '@')
+				return AT;
+			if (k == '~')
+				return TILDE;
 		} else if (*buf == 'f') {
 			if (streq(buf + 1, "n"))	return FN;
 			if (streq(buf + 1, "or"))	return FOR;
@@ -207,8 +210,9 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 	}
 	switch (c) {
 	case '!':
+		return BANG;
 	case '=':
-		return c;
+		return EQ;
 	case '`':
 		c = GETC();
 		if (c == '`') {
@@ -220,14 +224,14 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 		} else if (c == '^')
 			return BFLAT;
 		UNGETC(c);
-		return '`';
+		return BACKTICK;
 	case '$':
 		dollar = TRUE;
 		switch (c = GETC()) {
 		case '#':	return COUNT;
 		case '^':	return FLAT;
 		case '&':	return PRIM;
-		default:	UNGETC(c); return '$';
+		default:	UNGETC(c); return DOLLAR;
 		}
 	case '\'':
 		w = RW;
@@ -323,20 +327,30 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 	case '(':
 		if (w == RW)	/* not keywords, so let & friends work */
 			c = SUB;
-		/* FALLTHROUGH */
-	case ';':
-	case '^':
-	case ')':
-	case '{': case '}':
 		w = NW;
-		return c;
+		return LPAREN;
+	case ';':
+		w = NW;
+		return SCOLON;
+	case '^':
+		w = NW;
+		return CARET;
+	case ')':
+		w = NW;
+		return RPAREN;
+	case '{':
+		w = NW;
+		return LBRACE;
+	case '}':
+		w = NW;
+		return RBRACE;
 	case '&':
 		w = NW;
 		c = GETC();
 		if (c == '&')
 			return ANDAND;
 		UNGETC(c);
-		return '&';
+		return AMP;
 
 	case '|': {
 		int p[2];

@@ -179,6 +179,8 @@ getopt_done:
 	
 		runinitial();
 	
+		/* parsetrace = TRUE; */
+
 		initpath();
 		initpid();
 		initsignals(runflags & run_interactive, allowquit);

@@ -41,10 +41,23 @@ extern void print_prompt2(void);
 
 /* parse.y */
 
-extern Tree *parsetree;
-extern int yyparse(void);
-extern void initparse(void);
+typedef union {
+	char *str;
+	Tree *tree;
+} Token;
+extern Token token;
 
+extern Tree *parsetree;
+extern void *mkparser(void);
+extern void yyparse(void *, int, Token, int *);
+extern void freeparser(void *);
+
+#define	PARSE_CONTINUE	0
+#define	PARSE_ACCEPT	1
+#define PARSE_ENDLINE	2
+#define	PARSE_ERROR	3
+
+#define YYABORT assert(0 == "you need to make error handling work");
 
 /* heredoc.c */
 

@@ -348,7 +348,7 @@ static int fdfill(Input *in) {
 
 /* parse -- call yyparse(), but disable garbage collection and catch errors */
 extern Tree *parse(char *pr1, char *pr2) {
-	int result;
+	int state = 0;
 	assert(error == NULL);
 
 	inityy();
@@ -367,14 +367,26 @@ extern Tree *parse(char *pr1, char *pr2) {
 
 	gcreserve(300 * sizeof (Tree));
 	gcdisable();
-	result = yyparse();
+
+	int t;
+	void *parser = mkparser();
+	parsetree = NULL;
+	do {
+		t = yylex();
+		yyparse(parser, t, token, &state);
+		if (state == PARSE_ENDLINE)
+			yyparse(parser, 0, token, &state);
+	} while (state == PARSE_CONTINUE);
+	freeparser(parser);
+
 	gcenable();
 
-	if (result || error != NULL) {
+	if (state == PARSE_ERROR || error != NULL) {
 		char *e;
 		assert(error != NULL);
 		e = error;
 		error = NULL;
+		eprint("%s\n", e);
 		fail("$&parse", "%s", e);
 	}
 #if LISPTREES
@@ -688,9 +700,6 @@ extern void initinput(void) {
 
 	/* mark the historyfd as a file descriptor to hold back from forked children */
 	registerfd(&historyfd, TRUE);
-
-	/* call the parser's initialization */
-	initparse();
 
 #if READLINE
 	rl_readline_name = "es";

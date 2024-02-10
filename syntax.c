@@ -3,7 +3,7 @@
 #include "es.h"
 #include "input.h"
 #include "syntax.h"
-#include "token.h"
+#include "parse.h"
 
 Tree errornode;
 Tree *parsetree;

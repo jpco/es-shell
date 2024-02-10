@@ -27,7 +27,9 @@ config.h
 
 # yacc
 
-y.*
+parse.c
+parse.h
+parse.out
 
 # es
 

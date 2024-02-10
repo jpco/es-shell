@@ -1,162 +1,187 @@
-/* parse.y -- grammar for es ($Revision: 1.2 $) */
+/* lemon.y -- grammar for es ($Revision: 1.2 $) */
 
-%{
-/* Some yaccs insist on including stdlib.h */
+/* Which of these includes are strictly necessary? */
+%include{
 #include "es.h"
 #include "input.h"
 #include "syntax.h"
-%}
-
-%token	WORD QWORD
-%token	LOCAL LET FOR CLOSURE FN
-%token	ANDAND BACKBACK BBFLAT BFLAT EXTRACT CALL COUNT DUP FLAT OROR PRIM REDIR SUB
-%token	NL ENDFILE ERROR
-%token	MATCH
-
-%left	'^' '='
-%left	MATCH LOCAL LET FOR CLOSURE ')'
-%left	ANDAND OROR NL
-%left	'!'
-%left	PIPE
-%right	'$'
-%left	SUB
-
-%union {
-	Tree *tree;
-	char *str;
-	NodeKind kind;
 }
 
-%type <str>	WORD QWORD keyword
-%type <tree>	REDIR PIPE DUP
-		body cmd cmdsa cmdsan comword first fn line word param assign
-		args binding bindings params nlwords words simple redir sword
-		cases case
-%type <kind>	binder
+%code{
+Boolean parsetrace = FALSE;
 
-%start es
+void *mkparser() {
+	void *p = ParseAlloc(ealloc);
+	if (parsetrace)
+		ParseTrace(stdout, "	> ");
+	return p;
+}
 
-%%
+void yyparse(void *parser, int tokentype, Token tokendat, int *statep) {
+	Parse(parser, tokentype, tokendat, statep);
+}
 
-es	: line end		{ parsetree = $1; YYACCEPT; }
-	| error end		{ yyerrok; parsetree = NULL; YYABORT; }
+void freeparser(void *parser) {
+	ParseFree(parser, efree);
+}
+}
 
-end	: NL			{ if (!readheredocs(FALSE)) YYABORT; }
-	| ENDFILE		{ if (!readheredocs(TRUE)) YYABORT; }
+%extra_argument { int *statep }
 
-line	: cmd			{ $$ = $1; }
-	| cmdsa line		{ $$ = mkseq("%seq", $1, $2); }
+%parse_failure {
+	yyerror("syntax error");
+	*statep = PARSE_ERROR;
+}
 
-body	: cmd			{ $$ = $1; }
-	| cmdsan body		{ $$ = mkseq("%seq", $1, $2); }
+/* uncomment if any of these need precedence declared?
+%nonassoc	WORD QWORD.
+%nonassoc	LOCAL LET FOR CLOSURE FN.
+%nonassoc	ANDAND BACKBACK BBFLAT BFLAT EXTRACT CALL COUNT DUP FLAT OROR PRIM REDIR SUB.
+%nonassoc	NL ENDFILE ERROR.
+%nonassoc	MATCH.
+*/
 
-cmdsa	: cmd ';'		{ $$ = $1; }
-	| cmd '&'		{ $$ = prefix("%background", mk(nList, thunkify($1), NULL)); }
+%token	ERROR.
 
-cmdsan	: cmdsa			{ $$ = $1; }
-	| cmd NL		{ $$ = $1; if (!readheredocs(FALSE)) YYABORT; }
+%left	CARET EQ.
+%left	MATCH LOCAL LET FOR CLOSURE RPAREN.
+%left	ANDAND OROR NL.
+%left	BANG.
+%left	PIPE.
+%right	DOLLAR.
+%left	SUB.
 
-cmd	:		%prec LET		{ $$ = NULL; }
-	| simple				{ $$ = redirect($1); if ($$ == &errornode) YYABORT; }
-	| redir cmd	%prec '!'		{ $$ = redirect(mk(nRedir, $1, $2)); if ($$ == &errornode) YYABORT; }
-	| first assign				{ $$ = mk(nAssign, $1, $2); }
-	| fn					{ $$ = $1; }
-	| binder nl '(' bindings ')' nl cmd	{ $$ = mk($1, $4, $7); }
-	| cmd ANDAND nl cmd			{ $$ = mkseq("%and", $1, $4); }
-	| cmd OROR nl cmd			{ $$ = mkseq("%or", $1, $4); }
- 	| cmd PIPE nl cmd			{ $$ = mkpipe($1, $2->u[0].i, $2->u[1].i, $4); }
-	| '!' caret cmd				{ $$ = prefix("%not", mk(nList, thunkify($3), NULL)); }
-	| '~' word words			{ $$ = mk(nMatch, $2, $3); }
-	| EXTRACT word words			{ $$ = mk(nExtract, $2, $3); }
-	| MATCH word nl '(' cases ')'		{ $$ = mkmatch($2, $5); }
+/* are these new or something?
+%realloc erealloc
+%free	 efree */
 
-cases	: case				{ $$ = treecons2($1, NULL); }
-	| cases ';' case		{ $$ = treeconsend2($1, $3); }
-	| cases NL case			{ $$ = treeconsend2($1, $3); }
+/* WORD QWORD: char *. */
+/* REDIR PIPE DUP: Tree *. */
+/* Everything else: Nothing. */
+%token_type {Token}
+%default_type {Tree *}
 
-case	:				{ $$ = NULL; }
-	| word first			{ $$ = mk(nList, $1, thunkify($2)); }
+%type keyword	{char *}
+%type binder	{NodeKind}
 
-simple	: first				{ $$ = treecons2($1, NULL); }
-	| first args			{ $$ = firstprepend($1, $2); }
+es	::= line(A) end.	{ parsetree = A; *statep = PARSE_ACCEPT; }
+es	::= error end.		{ parsetree = NULL; *statep = PARSE_ERROR; }
 
-args	: word				{ $$ = treecons2($1, NULL); }
-	| redir				{ $$ = redirappend(NULL, $1); }
-	| args word			{ $$ = treeconsend2($1, $2); }
-	| args redir			{ $$ = redirappend($1, $2); }
+end	::= NL.			{ if (!readheredocs(FALSE)) *statep = PARSE_ERROR; }
+end	::= ENDFILE.		{ if (!readheredocs(TRUE)) *statep = PARSE_ERROR; }
 
-redir	: DUP				{ $$ = $1; }
-	| REDIR word			{ $$ = mkredir($1, $2); }
+line(A)	::= cmd(B).		{ A = B; *statep = PARSE_ENDLINE; }
+line(A)	::= cmdsa(B) line(C).	{ A = mkseq("%seq", B, C); *statep = PARSE_ENDLINE; }
 
-bindings: binding			{ $$ = treecons2($1, NULL); }
-	| bindings ';' binding		{ $$ = treeconsend2($1, $3); }
-	| bindings NL binding		{ $$ = treeconsend2($1, $3); }
+body(A)	::= cmd(B).		{ A = B; }
+body(A)	::= cmdsan(B) body(C).	{ A = mkseq("%seq", B, C); }
 
-binding	:				{ $$ = NULL; }
-	| fn				{ $$ = $1; }
-	| first assign			{ $$ = mk(nAssign, $1, $2); }
+cmdsa(A)	::= cmd(B) SCOLON.	{ A = B; }
+cmdsa(A)	::= cmd(B) AMP.		{ A = prefix("%background", mk(nList, thunkify(B), NULL)); }
 
-assign	: caret '=' caret words		{ $$ = $4; }
+cmdsan(A)	::= cmdsa(B).		{ A = B; }
+cmdsan(A)	::= cmd(B) NL.		{ A = B; if (!readheredocs(FALSE)) *statep = PARSE_ERROR; }
 
-fn	: FN word params '{' body '}'	{ $$ = fnassign($2, mklambda($3, $5)); }
-	| FN word			{ $$ = fnassign($2, NULL); }
+cmd(A)	::= .		[LET]			{ A = NULL; }
+cmd(A)	::= simple(B).				{ A = redirect(B); if (A == &errornode) *statep = PARSE_ERROR; }
+cmd(A)	::= redir(B) cmd(C).	[BANG]		{ A = redirect(mk(nRedir, B, C)); if (A == &errornode) *statep = PARSE_ERROR; }
+cmd(A)	::= first(B) assign(C).			{ A = mk(nAssign, B, C); }
+cmd(A)	::= fn(B).				{ A = B; }
+cmd(A)	::= binder(B) nl LPAREN bindings(C) RPAREN nl cmd(D).	{ A = mk(B, C, D); }
+cmd(A)	::= cmd(B) ANDAND nl cmd(C).		{ A = mkseq("%and", B, C); }
+cmd(A)	::= cmd(B) OROR nl cmd(C).		{ A = mkseq("%or", B, C); }
+cmd(A)	::= cmd(B) PIPE(C) nl cmd(D).		{ A = mkpipe(B, C.tree->u[0].i, C.tree->u[1].i, D); }
+cmd(A)	::= BANG caret cmd(B).			{ A = prefix("%not", mk(nList, thunkify(B), NULL)); }
+cmd(A)	::= TILDE word(B) words(C).		{ A = mk(nMatch, B, C); }
+cmd(A)	::= EXTRACT word(B) words(C).		{ A = mk(nExtract, B, C); }
+cmd(A)	::= MATCH word(B) nl LPAREN cases(C) RPAREN.	{ A = mkmatch(B, C); }
 
-first	: comword			{ $$ = $1; }
-	| first '^' sword		{ $$ = mk(nConcat, $1, $3); }
+cases(A)	::= case(B).			{ A = treecons2(B, NULL); }
+cases(A)	::= cases(B) SCOLON case(C).	{ A = treeconsend2(B, C); }
+cases(A)	::= cases(B) NL case(C).	{ A = treeconsend2(B, C); }
 
-sword	: comword			{ $$ = $1; }
-	| keyword			{ $$ = mk(nWord, $1); }
+case(A)	::=.				{ A = NULL; }
+case(A)	::= word(B) first(C).		{ A = mk(nList, B, thunkify(C)); }
 
-word	: sword				{ $$ = $1; }
-	| word '^' sword		{ $$ = mk(nConcat, $1, $3); }
+simple(A)	::= first(B).		{ A = treecons2(B, NULL); }
+simple(A)	::= first(B) args(C).	{ A = firstprepend(B, C); }
 
-comword	: param				{ $$ = $1; }
-	| '(' nlwords ')'		{ $$ = $2; }
-	| '{' body '}'			{ $$ = thunkify($2); }
-	| '@' params '{' body '}'	{ $$ = mklambda($2, $4); }
-	| '$' sword			{ $$ = mk(nVar, $2); }
-	| '$' sword SUB words ')'	{ $$ = mk(nVarsub, $2, $4); }
-	| CALL sword			{ $$ = mk(nCall, $2); }
-	| COUNT sword			{ $$ = mk(nCall, prefix("%count", treecons(mk(nVar, $2), NULL))); }
-	| FLAT sword			{ $$ = flatten(mk(nVar, $2), " "); }
-	| PRIM WORD			{ $$ = mk(nPrim, $2); }
-	| '`' sword			{ $$ = backquote(mk(nVar, mk(nWord, "ifs")), $2); }
-	| BFLAT sword			{ $$ = flatten(backquote(mk(nVar, mk(nWord, "ifs")), $2), " "); }
-	| BACKBACK word	sword		{ $$ = backquote($2, $3); }
-	| BBFLAT word sword		{ $$ = flatten(backquote($2, $3), " "); }
+args(A)	::= word(B).			{ A = treecons2(B, NULL); }
+args(A)	::= redir(B).			{ A = redirappend(NULL, B); }
+args(A)	::= args(B) word(C).		{ A = treeconsend2(B, C); }
+args(A)	::= args(B) redir(C).		{ A = redirappend(B, C); }
 
-param	: WORD				{ $$ = mk(nWord, $1); }
-	| QWORD				{ $$ = mk(nQword, $1); }
+redir(A)	::= DUP(B).		{ A = B.tree; }
+redir(A)	::= REDIR(B) word(C).	{ A = mkredir(B.tree, C); }
 
-params	:				{ $$ = NULL; }
-	| params param			{ $$ = treeconsend($1, $2); }
+bindings(A)	::= binding(B).				{ A = treecons2(B, NULL); }
+bindings(A)	::= bindings(B) SCOLON binding(C).	{ A = treeconsend2(B, C); }
+bindings(A)	::= bindings(B) NL binding(C).		{ A = treeconsend2(B, C); }
 
-words	:				{ $$ = NULL; }
-	| words word			{ $$ = treeconsend($1, $2); }
+binding(A)	::=.			{ A = NULL; }
+binding(A)	::= fn(B).		{ A = B; }
+binding(A)	::= first(B) assign(C).	{ A = mk(nAssign, B, C); }
 
-nlwords :				{ $$ = NULL; }
-	| nlwords word			{ $$ = treeconsend($1, $2); }
-	| nlwords NL			{ $$ = $1; }
+assign(A)	::= caret EQ caret words(B).	{ A = B; }
 
-nl	:
-	| nl NL
+fn(A)	::= FN word(B) params(C) LBRACE body(D) RBRACE.	{ A = fnassign(B, mklambda(C, D)); }
+fn(A)	::= FN word(B).					{ A = fnassign(B, NULL); }
 
-caret 	:	%prec '^'
-	| '^'
+first(A)	::= comword(B).			{ A = B; }
+first(A)	::= first(B) CARET sword(C).	{ A = mk(nConcat, B, C); }
 
-binder	: LOCAL		{ $$ = nLocal; }
-	| LET		{ $$ = nLet; }
-	| FOR		{ $$ = nFor; }
-	| CLOSURE	{ $$ = nClosure; }
+sword(A)	::= comword(B).		{ A = B; }
+sword(A)	::= keyword(B).		{ A = mk(nWord, B); }
 
-keyword	: '!'		{ $$ = "!"; }
-	| '~'		{ $$ = "~"; }
-	| '='		{ $$ = "="; }
-	| EXTRACT	{ $$ = "~~"; }
-	| LOCAL 	{ $$ = "local"; }
-	| LET		{ $$ = "let"; }
-	| FOR		{ $$ = "for"; }
-	| FN		{ $$ = "fn"; }
-	| CLOSURE	{ $$ = "%closure"; }
-	| MATCH		{ $$ = "match"; }
+word(A)	::= sword(B).			{ A = B; }
+word(A)	::= word(B) CARET sword(C).	{ A = mk(nConcat, B, C); }
 
+comword(A)	::= param(B).				{ A = B; }
+comword(A)	::= LPAREN nlwords(B) RPAREN.		{ A = B; }
+comword(A)	::= LBRACE body(B) RBRACE.		{ A = thunkify(B); }
+comword(A)	::= AT params(B) LBRACE body(C) RBRACE.	{ A = mklambda(B, C); }
+comword(A)	::= DOLLAR sword(B).			{ A = mk(nVar, B); }
+comword(A)	::= DOLLAR sword(B) SUB words(C) RPAREN.	{ A = mk(nVarsub, B, C); }
+comword(A)	::= CALL sword(B).			{ A = mk(nCall, B); }
+comword(A)	::= COUNT sword(B).			{ A = mk(nCall, prefix("%count", treecons(mk(nVar, B), NULL))); }
+comword(A)	::= FLAT sword(B).			{ A = flatten(mk(nVar, B), " "); }
+comword(A)	::= PRIM WORD(B).			{ A = mk(nPrim, B.str); }
+comword(A)	::= BACKTICK sword(B).			{ A = backquote(mk(nVar, mk(nWord, "ifs")), B); }
+comword(A)	::= BFLAT sword(B).			{ A = flatten(backquote(mk(nVar, mk(nWord, "ifs")), B), " "); }
+comword(A)	::= BACKBACK word(B) sword(C).		{ A = backquote(B, C); }
+comword(A)	::= BBFLAT word(B) sword(C).		{ A = flatten(backquote(B, C), " "); }
+
+param(A)	::= WORD(B).		{ A = mk(nWord, B.str); }
+param(A)	::= QWORD(B).		{ A = mk(nQword, B.str); }
+
+params(A)	::= .			{ A = NULL; }
+params(A)	::= params(B) param(C).	{ A = treeconsend(B, C); }
+
+words(A)	::= .			{ A = NULL; }
+words(A)	::= words(B) word(C).	{ A = treeconsend(B, C); }
+
+nlwords(A)	::= .			{ A = NULL; }
+nlwords(A)	::= nlwords(B) word(C).	{ A = treeconsend(B, C); }
+nlwords(A)	::= nlwords(B) NL.	{ A = B; }
+
+nl	::= .
+nl	::= nl NL.
+
+caret 	::= .	[CARET]
+caret	::= CARET.
+
+binder(A)	::= LOCAL.	{ A = nLocal; }
+binder(A)	::= LET.	{ A = nLet; }
+binder(A)	::= FOR.	{ A = nFor; }
+binder(A)	::= CLOSURE.	{ A = nClosure; }
+
+keyword(A)	::= BANG.	{ A = "!"; }
+keyword(A)	::= TILDE.	{ A = "~"; }
+keyword(A)	::= EQ.		{ A = "="; }
+keyword(A)	::= EXTRACT.	{ A = "~~"; }
+keyword(A)	::= LOCAL. 	{ A = "local"; }
+keyword(A)	::= LET.	{ A = "let"; }
+keyword(A)	::= FOR.	{ A = "for"; }
+keyword(A)	::= FN.		{ A = "fn"; }
+keyword(A)	::= CLOSURE.	{ A = "%closure"; }
+keyword(A)	::= MATCH.	{ A = "match"; }
