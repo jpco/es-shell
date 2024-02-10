@@ -28,7 +28,7 @@ void freeparser(void *parser) {
 
 %extra_argument { int *statep }
 
-%parse_failure {
+%syntax_error {
 	yyerror("syntax error");
 	*statep = PARSE_ERROR;
 }
@@ -64,14 +64,18 @@ void freeparser(void *parser) {
 %type keyword	{char *}
 %type binder	{NodeKind}
 
-es	::= line(A) end.	{ parsetree = A; *statep = PARSE_ACCEPT; }
-es	::= error end.		{ parsetree = NULL; *statep = PARSE_ERROR; }
+main	::= in.
+in	::= .
+in	::= in es end.
+
+es	::= line(A).		{ parsetree = A; *statep = PARSE_ACCEPT; }
+es	::= error.		{ parsetree = NULL; *statep = PARSE_ERROR; }
 
 end	::= NL.			{ if (!readheredocs(FALSE)) *statep = PARSE_ERROR; }
 end	::= ENDFILE.		{ if (!readheredocs(TRUE)) *statep = PARSE_ERROR; }
 
-line(A)	::= cmd(B).		{ A = B; *statep = PARSE_ENDLINE; }
-line(A)	::= cmdsa(B) line(C).	{ A = mkseq("%seq", B, C); *statep = PARSE_ENDLINE; }
+line(A)	::= cmd(B).		{ A = B; }
+line(A)	::= cmdsa(B) line(C).	{ A = mkseq("%seq", B, C); }
 
 body(A)	::= cmd(B).		{ A = B; }
 body(A)	::= cmdsan(B) body(C).	{ A = mkseq("%seq", B, C); }

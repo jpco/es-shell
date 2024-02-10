@@ -3,6 +3,7 @@
 
 #include "es.h"
 #include "input.h"
+#include "parse.h"
 
 
 /*
@@ -374,8 +375,6 @@ extern Tree *parse(char *pr1, char *pr2) {
 	do {
 		t = yylex();
 		yyparse(parser, t, token, &state);
-		if (state == PARSE_ENDLINE)
-			yyparse(parser, 0, token, &state);
 	} while (state == PARSE_CONTINUE);
 	freeparser(parser);
 
@@ -384,9 +383,13 @@ extern Tree *parse(char *pr1, char *pr2) {
 	if (state == PARSE_ERROR || error != NULL) {
 		char *e;
 		assert(error != NULL);
+
+		/* scan to end of line.  yacc did this for us :/ */
+		while (t != ENDFILE && t != NL)
+			t = yylex();
+
 		e = error;
 		error = NULL;
-		eprint("%s\n", e);
 		fail("$&parse", "%s", e);
 	}
 #if LISPTREES
