@@ -378,6 +378,7 @@ extern Tree *parse(char *pr1, char *pr2) {
 	} while (state == PARSE_CONTINUE);
 	freeparser(parser);
 
+	Ref(Tree *, tree, parsetree);
 	gcenable();
 
 	if (state == PARSE_ERROR || error != NULL) {
@@ -394,9 +395,9 @@ extern Tree *parse(char *pr1, char *pr2) {
 	}
 #if LISPTREES
 	if (input->runflags & run_lisptrees)
-		eprint("%B\n", parsetree);
+		eprint("%B\n", tree);
 #endif
-	return parsetree;
+	RefReturn(tree);
 }
 
 /* resetparser -- clear parser errors in the signal handler */
