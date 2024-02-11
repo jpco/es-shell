@@ -325,8 +325,10 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 		w = NW;
 		return NL;
 	case '(':
-		if (w == RW)	/* not keywords, so let & friends work */
-			c = SUB;
+		if (w == RW) {	/* not keywords, so let & friends work */
+			w = NW;
+			return SUB;
+		}
 		w = NW;
 		return LPAREN;
 	case ';':
