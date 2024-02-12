@@ -375,6 +375,7 @@ extern Tree *parse(char *pr1, char *pr2) {
 	do {
 		t = yylex();
 		yyparse(parser, t, token, &state);
+		yyreducepending(parser);
 	} while (state == PARSE_CONTINUE);
 	freeparser(parser);
 

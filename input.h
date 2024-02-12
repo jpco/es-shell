@@ -50,6 +50,7 @@ extern Token token;
 extern Tree *parsetree;
 extern void *mkparser(void);
 extern void yyparse(void *, int, Token, int *);
+extern void yyreducepending(void *);
 extern void freeparser(void *);
 
 #define	PARSE_CONTINUE	0

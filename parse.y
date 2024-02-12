@@ -24,6 +24,17 @@ void yyparse(void *parser, int tokentype, Token tokendat, int *statep) {
 void freeparser(void *parser) {
 	ParseFree(parser, efree);
 }
+
+extern void yyreducepending(void *pp) {
+	yyParser *parser = (yyParser*)pp;
+	YYACTIONTYPE yyact = parser->yytos->stateno;
+	if (yyact < YY_MIN_REDUCE)
+		return;
+	int ignored;
+	Token tgnored;
+	while (yyact >= YY_MIN_REDUCE)
+		yyact = yy_reduce_pending(parser, yyact, tgnored, &ignored);
+}
 }
 
 %extra_argument { int *statep }
@@ -64,9 +75,7 @@ void freeparser(void *parser) {
 %type keyword	{char *}
 %type binder	{NodeKind}
 
-main	::= in.
-in	::= .
-in	::= in es end.
+main	::= es end.
 
 es	::= line(A).		{ parsetree = A; *statep = PARSE_ACCEPT; }
 es	::= error.		{ parsetree = NULL; *statep = PARSE_ERROR; }
