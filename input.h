@@ -52,10 +52,12 @@ extern void *mkparser(void);
 extern void yyparse(void *, int, Token, int *);
 extern void freeparser(void *);
 
-#define	PARSE_CONTINUE	0
-#define	PARSE_ACCEPT	1
-#define PARSE_ENDLINE	2
-#define	PARSE_ERROR	3
+#define	PARSE_CONTINUE		0
+#define	PARSE_ACCEPT		1
+#define	PARSE_ERROR		2
+#define	PARSE_HEREDOC_ACCEPT	3
+#define	PARSE_HEREDOC_ENDFILE	4
+#define	PARSE_HEREDOC_CONTINUE	5
 
 /* heredoc.c */
 

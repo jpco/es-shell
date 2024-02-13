@@ -3,7 +3,8 @@
 
 #include "es.h"
 #include "input.h"
-#include "parse.h"
+#include "parse.h"	/* only used to scan to end of file on error. :/ */
+#include "syntax.h"	/* only used for readheredocs(). :/ */
 
 
 /*
@@ -375,6 +376,20 @@ extern Tree *parse(char *pr1, char *pr2) {
 	do {
 		t = yylex();
 		yyparse(parser, t, token, &state);
+		/* If this isn't a clear sign that `state` just needs a separate
+		 * HEREDOC bit, I dunno what is. */
+		if (state == PARSE_HEREDOC_ACCEPT
+				|| state == PARSE_HEREDOC_ENDFILE
+				|| state == PARSE_HEREDOC_CONTINUE) {
+			if (!readheredocs(state == PARSE_HEREDOC_ENDFILE))
+				state = PARSE_ERROR;
+			else {
+				if (state == PARSE_HEREDOC_CONTINUE)
+					state = PARSE_CONTINUE;
+				else
+					state = PARSE_ACCEPT;
+			}
+		}
 	} while (state == PARSE_CONTINUE);
 	freeparser(parser);
 

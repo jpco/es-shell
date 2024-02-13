@@ -85,8 +85,8 @@ main	::= es end.
 es	::= line(A).		{ parsetree = A; *statep = PARSE_ACCEPT; }
 es	::= error.		{ parsetree = NULL; *statep = PARSE_ERROR; }
 
-end	::= NL.			{ if (!readheredocs(FALSE)) *statep = PARSE_ERROR; }
-end	::= ENDFILE.		{ if (!readheredocs(TRUE)) *statep = PARSE_ERROR; }
+end	::= NL.			{ *statep = PARSE_HEREDOC_ACCEPT; }
+end	::= ENDFILE.		{ *statep = PARSE_HEREDOC_ENDFILE; }
 
 line(A)	::= cmd(B).		{ A = B; }
 line(A)	::= cmdsa(B) line(C).	{ A = mkseq("%seq", B, C); }
@@ -98,7 +98,7 @@ cmdsa(A)	::= cmd(B) SCOLON.	{ A = B; }
 cmdsa(A)	::= cmd(B) AMP.		{ A = prefix("%background", mk(nList, thunkify(B), NULL)); }
 
 cmdsan(A)	::= cmdsa(B).		{ A = B; }
-cmdsan(A)	::= cmd(B) NL.		{ A = B; if (!readheredocs(FALSE)) *statep = PARSE_ERROR; }
+cmdsan(A)	::= cmd(B) NL.		{ A = B; *statep = PARSE_HEREDOC_CONTINUE; }
 
 cmd(A)	::= .		[LET]			{ A = NULL; }
 cmd(A)	::= simple(B).				{ A = redirect(B); if (A == &errornode) *statep = PARSE_ERROR; }
