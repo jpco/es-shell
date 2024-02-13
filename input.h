@@ -41,9 +41,14 @@ extern void print_prompt2(void);
 
 /* parse.y */
 
-typedef union {
-	char *str;
-	Tree *tree;
+typedef enum { TK_STR, TK_TREE, TK_NODEKIND } TokenType;
+typedef struct {
+	TokenType type;
+	union {
+		char *str;
+		Tree *tree;
+		NodeKind nk;
+	} u;
 } Token;
 extern Token token;
 

@@ -200,7 +200,8 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 		else if (streq(buf, "match"))
 			return MATCH;
 		w = RW;
-		y->str = gcdup(buf);
+		y->type = TK_STR;
+		y->u.str = gcdup(buf);
 		return WORD;
 	}
 	if (c == '`' || c == '!' || c == '$' || c == '\'' || c == '=') {
@@ -250,7 +251,8 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 		}
 		UNGETC(c);
 		buf[i] = '\0';
-		y->str = gcdup(buf);
+		y->type = TK_STR;
+		y->u.str = gcdup(buf);
 		return QWORD;
 	case '\\':
 		if ((c = GETC()) == '\n') {
@@ -312,7 +314,8 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 			break;
 		}
 		buf[1] = 0;
-		y->str = gcdup(buf);
+		y->type = TK_STR;
+		y->u.str = gcdup(buf);
 		return QWORD;
 	case '#':
 		while ((c = GETC()) != '\n') /* skip comment until newline */
@@ -366,7 +369,8 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 			scanerror("expected digit after '='");	/* can't close a pipe */
 			return ERROR;
 		}
-		y->tree = mk(nPipe, p[0], p[1]);
+		y->type = TK_TREE;
+		y->u.tree = mk(nPipe, p[0], p[1]);
 		return PIPE;
 	}
 
@@ -411,12 +415,14 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 		if (!getfds(fd, c, fd[0], DEFAULT))
 			return ERROR;
 		if (fd[1] != DEFAULT) {
-			y->tree = (fd[1] == CLOSED)
+			y->type = TK_TREE;
+			y->u.tree = (fd[1] == CLOSED)
 					? mkclose(fd[0])
 					: mkdup(fd[0], fd[1]);
 			return DUP;
 		}
-		y->tree = mkredircmd(cmd, fd[0]);
+		y->type = TK_TREE;
+		y->u.tree = mkredircmd(cmd, fd[0]);
 		return REDIR;
 	}
 

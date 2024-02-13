@@ -94,8 +94,8 @@ src	:
 	@echo ${OTHER} ${CFILES} ${HFILES}
 
 # TODO: use a lemon distributed in our own source
-parse.c parse.h : parse.y
-	lemon $(srcdir)/parse.y
+parse.c parse.h : lempar.c parse.y
+	lemon -T$(srcdir)/lempar.c $(srcdir)/parse.y
 
 initial.c : esdump $(srcdir)/initial.es
 	./esdump < $(srcdir)/initial.es > initial.c
