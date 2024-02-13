@@ -17,24 +17,29 @@ void *mkparser() {
 	return p;
 }
 
+/* A big ol' hack.  Forces the parser to do a reduce if that's the pending
+ * action.  This should REALLY be implemented as part of Parse() in lempar.c. */
+static void yyreducepending(void *pp) {
+	yyParser *parser = (yyParser*)pp;
+	YYACTIONTYPE yyact = parser->yytos->stateno;
+	int dobreak = 0;
+	Token ignored;
+	while (yyact >= YY_MIN_REDUCE) {
+		yyact = yy_reduce_pending(parser, yyact, ignored, &dobreak);
+		if (dobreak)
+			break;
+	}
+}
+
 void yyparse(void *parser, int tokentype, Token tokendat, int *statep) {
 	Parse(parser, tokentype, tokendat, statep);
+	yyreducepending(parser);
 }
 
 void freeparser(void *parser) {
 	ParseFree(parser, efree);
 }
 
-extern void yyreducepending(void *pp) {
-	yyParser *parser = (yyParser*)pp;
-	YYACTIONTYPE yyact = parser->yytos->stateno;
-	if (yyact < YY_MIN_REDUCE)
-		return;
-	int ignored;
-	Token tgnored;
-	while (yyact >= YY_MIN_REDUCE)
-		yyact = yy_reduce_pending(parser, yyact, tgnored, &ignored);
-}
 }
 
 %extra_argument { int *statep }

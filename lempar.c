@@ -213,7 +213,7 @@ struct yyParser {
   ParseARG_SDECL                /* A place to hold %extra_argument */
   ParseCTX_SDECL                /* A place to hold %extra_context */
 #if YYSTACKDEPTH<=0
-  int yystksz;                  /* Current side of the stack */
+  int yystksz;                  /* Current size of the stack */
   yyStackEntry *yystack;        /* The parser's stack */
   yyStackEntry yystk0;          /* First stack entry */
 #else
