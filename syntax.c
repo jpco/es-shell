@@ -6,12 +6,6 @@
 #include "parse.h"
 
 Tree errornode;
-Tree *parsetree;
-
-/* initparse -- called at the dawn of time */
-extern void initparse(void) {
-	globalroot(&parsetree);
-}
 
 /* treecons -- create new tree list cell */
 extern Tree *treecons(Tree *car, Tree *cdr) {

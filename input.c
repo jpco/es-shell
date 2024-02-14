@@ -5,6 +5,7 @@
 #include "input.h"
 #include "parse.h"	/* only used to scan to end of file on error. :/ */
 #include "syntax.h"	/* only used for readheredocs(). :/ */
+#include "gc.h"		/* used for Token gc'ing :O */
 
 
 /*
@@ -348,9 +349,44 @@ static int fdfill(Input *in) {
  * the input loop
  */
 
+DefineTag(Token, static);
+
+static Token *mktoken(void) {
+	Token *t = gcnew(Token);
+	t->type = TK_NONE;
+	return t;
+}
+
+static void *TokenCopy(void *op) {
+	void *np = gcnew(Token);
+	memcpy(np, op, sizeof (Token));
+	return np;
+}
+
+static size_t TokenScan(void *p) {
+	Token *t = p;
+	switch (t->type) {
+	case TK_TREE:
+		t->u.tree = forward(t->u.tree);
+		break;
+	case TK_STR:
+		t->u.str = forward(t->u.str);
+		break;
+	case TK_NONE: case TK_NODEKIND:
+		/* nothing */
+		break;
+	default:
+		panic("bad token type %d\n", t->type);
+	}
+	return sizeof (Token);
+}
+
 /* parse -- call yyparse(), but disable garbage collection and catch errors */
 extern Tree *parse(char *pr1, char *pr2) {
-	int state = 0;
+	ParseState ps;
+	ps.state = PARSE_CONTINUE;
+	ps.parsetree = NULL;
+
 	assert(error == NULL);
 
 	inityy();
@@ -367,42 +403,44 @@ extern Tree *parse(char *pr1, char *pr2) {
 #endif
 	prompt2 = pr2;
 
-	gcreserve(300 * sizeof (Tree));
-	gcdisable();
-
 	int t;
-	void *parser = mkparser();
-	parsetree = NULL;
+	Ref(Tree *, parsetree, NULL);
+	Ref(Parser *, parser, mkparser());
+	Ref(Token *, token, mktoken());
 	do {
-		t = yylex();
-		yyparse(parser, t, token, &state);
-		/* If this isn't a clear sign that `state` just needs a separate
+		t = yylex(token);
+		gcdisable();
+		yyparse(parser, t, token, &ps);
+		if (ps.parsetree != NULL)
+			parsetree = ps.parsetree;
+		gcenable();
+		/* If this isn't a clear sign that `ps.state` just needs a separate
 		 * HEREDOC bit, I dunno what is. */
-		if (state == PARSE_HEREDOC_ACCEPT
-				|| state == PARSE_HEREDOC_ENDFILE
-				|| state == PARSE_HEREDOC_CONTINUE) {
-			if (!readheredocs(state == PARSE_HEREDOC_ENDFILE))
-				state = PARSE_ERROR;
+		if (ps.state == PARSE_HEREDOC_ACCEPT
+				|| ps.state == PARSE_HEREDOC_ENDFILE
+				|| ps.state == PARSE_HEREDOC_CONTINUE) {
+			if (!readheredocs(ps.state == PARSE_HEREDOC_ENDFILE))
+				ps.state = PARSE_ERROR;
 			else {
-				if (state == PARSE_HEREDOC_CONTINUE)
-					state = PARSE_CONTINUE;
+				if (ps.state == PARSE_HEREDOC_CONTINUE)
+					ps.state = PARSE_CONTINUE;
 				else
-					state = PARSE_ACCEPT;
+					ps.state = PARSE_ACCEPT;
 			}
 		}
-	} while (state == PARSE_CONTINUE);
-	freeparser(parser);
+	} while (ps.state == PARSE_CONTINUE);
+	RefEnd(token);
+	RefEnd(parser);
 
-	Ref(Tree *, tree, parsetree);
-	gcenable();
-
-	if (state == PARSE_ERROR || error != NULL) {
+	if (ps.state == PARSE_ERROR || error != NULL) {
 		char *e;
 		assert(error != NULL);
 
 		/* scan to end of line.  yacc did this for us :/ */
-		while (t != ENDFILE && t != NL)
-			t = yylex();
+		while (t != ENDFILE && t != NL) {
+			Token tok;
+			t = yylex(&tok);
+		}
 
 		e = error;
 		error = NULL;
@@ -410,9 +448,9 @@ extern Tree *parse(char *pr1, char *pr2) {
 	}
 #if LISPTREES
 	if (input->runflags & run_lisptrees)
-		eprint("%B\n", tree);
+		eprint("%B\n", parsetree);
 #endif
-	RefReturn(tree);
+	RefReturn(parsetree);
 }
 
 /* resetparser -- clear parser errors in the signal handler */

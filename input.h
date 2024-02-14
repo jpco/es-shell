@@ -33,15 +33,7 @@ extern void yyerror(char *s);
 
 /* token.c */
 
-extern const char dnw[];
-extern int yylex(void);
-extern void inityy(void);
-extern void print_prompt2(void);
-
-
-/* parse.y */
-
-typedef enum { TK_STR, TK_TREE, TK_NODEKIND } TokenType;
+typedef enum { TK_NONE, TK_STR, TK_TREE, TK_NODEKIND } TokenType;
 typedef struct {
 	TokenType type;
 	union {
@@ -50,12 +42,26 @@ typedef struct {
 		NodeKind nk;
 	} u;
 } Token;
-extern Token token;
 
-extern Tree *parsetree;
-extern void *mkparser(void);
-extern void yyparse(void *, int, Token, int *);
-extern void freeparser(void *);
+extern const char dnw[];
+extern int yylex(Token *y);
+extern void inityy(void);
+extern void print_prompt2(void);
+
+
+/* parse.y */
+
+typedef struct {
+	Tree *parsetree;
+	int state;
+} ParseState;
+
+typedef struct yyParser Parser;
+
+extern void initparse(void);
+extern Parser *mkparser(void);
+extern void yyparse(Parser *, int, Token *, ParseState *);
+extern void freeparser(Parser *);
 
 #define	PARSE_CONTINUE		0
 #define	PARSE_ACCEPT		1

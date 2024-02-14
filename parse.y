@@ -3,50 +3,90 @@
 /* Which of these includes are strictly necessary? */
 %include{
 #include "es.h"
+#include "gc.h"	/* gc-able parser! */
 #include "input.h"
 #include "syntax.h"
 }
 
 %code{
+
+DefineTag(Parser, static);
+
+void *ParserCopy(void *op) {
+	Parser *pp = op;
+	int stacksz = (pp->yytos - pp->yystack);
+	int stackend_off = (pp->yystackEnd - pp->yystack);
+	Parser *np = gcnew(Parser);
+	memcpy(np, op, sizeof(Parser));
+	/* FIXME: there are probably more pointers that need to be modified, right? */
+	np->yytos = np->yystack + stacksz;
+	np->yystackEnd = np->yystack + stackend_off;
+	return np;
+}
+
+size_t ParserScan(void *p) {
+	Parser *parser = p;
+	yyStackEntry *entry;
+	for (entry = &parser->yystack[1]; entry <= parser->yytos; entry++) {
+		switch (entry->minor.yy0.type) {
+		case TK_STR:
+			entry->minor.yy0.u.str = forward(entry->minor.yy0.u.str);
+			break;
+		case TK_TREE:
+			entry->minor.yy0.u.tree = forward(entry->minor.yy0.u.tree);
+			break;
+		case TK_NODEKIND: case TK_NONE:
+			/* Do nothing. */
+			break;
+		default:
+			panic("Bad token type %d\n", entry->minor.yy0.type);
+		}
+	}
+	return sizeof(Parser);
+}
+
+
 Boolean parsetrace = FALSE;
 
-void *mkparser() {
-	void *p = ParseAlloc(ealloc);
+/* Awkward way to smoosh gcalloc and ParseAlloc together */
+static void *gcparseralloc(size_t size) {
+	return gcalloc(size, &ParserTag);
+}
+
+/* Allocate a new Parser in gc space */
+Parser *mkparser() {
+	Parser *p = ParseAlloc(gcparseralloc);
 	if (parsetrace)
-		ParseTrace(stdout, "	> ");
+		ParseTrace(stderr, "	> ");
 	return p;
 }
 
 /* A big ol' hack.  Forces the parser to do a reduce if that's the pending
  * action.  This should REALLY be implemented as part of Parse() in lempar.c. */
-static void yyreducepending(void *pp) {
-	yyParser *parser = (yyParser*)pp;
+static void yyreducepending(Parser *parser) {
 	YYACTIONTYPE yyact = parser->yytos->stateno;
 	int dobreak = 0;
-	Token ignored;
+	Token filler;
+	filler.type = TK_NONE;
 	while (yyact >= YY_MIN_REDUCE) {
-		yyact = yy_reduce_pending(parser, yyact, ignored, &dobreak);
+		yyact = yy_reduce_pending(parser, yyact, filler, &dobreak);
 		if (dobreak)
 			break;
 	}
 }
 
-void yyparse(void *parser, int tokentype, Token tokendat, int *statep) {
-	Parse(parser, tokentype, tokendat, statep);
+void yyparse(Parser *parser, int tokentype, Token *tokendat, ParseState *ps) {
+	Parse(parser, tokentype, *tokendat, ps);
 	yyreducepending(parser);
 }
 
-void freeparser(void *parser) {
-	ParseFree(parser, efree);
 }
 
-}
-
-%extra_argument { int *statep }
+%extra_argument { ParseState *ps }
 
 %syntax_error {
 	yyerror("syntax error");
-	*statep = PARSE_ERROR;
+	ps->state = PARSE_ERROR;
 }
 
 /* uncomment if any of these need precedence declared?
@@ -99,6 +139,12 @@ Token tknk(NodeKind nk) {
 	return tk;
 }
 
+Token tknone(void) {
+	Token tk;
+	tk.type = TK_NONE;
+	return tk;
+}
+
 #define T(n) (n).u.tree
 }
 
@@ -107,13 +153,13 @@ Token tknk(NodeKind nk) {
 %type binder	{NodeKind}
 */
 
-main	::= es end.
+main(A)	::= es end.		{ A = tknone(); }
 
-es	::= line(A).		{ parsetree = T(A);	*statep = PARSE_ACCEPT; }
-es	::= error.		{ parsetree = NULL;	*statep = PARSE_ERROR; }
+es	::= line(A).		{ ps->parsetree = T(A);	ps->state = PARSE_ACCEPT; }
+es	::= error.		{ ps->state = PARSE_ERROR; }
 
-end	::= NL.			{ *statep = PARSE_HEREDOC_ACCEPT; }
-end	::= ENDFILE.		{ *statep = PARSE_HEREDOC_ENDFILE; }
+end	::= NL.			{ ps->state = PARSE_HEREDOC_ACCEPT; }
+end	::= ENDFILE.		{ ps->state = PARSE_HEREDOC_ENDFILE; }
 
 line(A)	::= cmd(B).		{ A = B; }
 line(A)	::= cmdsa(B) line(C).	{ A = tk(mkseq("%seq", T(B), T(C))); }
@@ -125,11 +171,11 @@ cmdsa(A)	::= cmd(B) SCOLON.	{ A = B; }
 cmdsa(A)	::= cmd(B) AMP.		{ A = tk(prefix("%background", mk(nList, thunkify(T(B)), NULL))); }
 
 cmdsan(A)	::= cmdsa(B).		{ A = B; }
-cmdsan(A)	::= cmd(B) NL.		{ A = B; *statep = PARSE_HEREDOC_CONTINUE; }
+cmdsan(A)	::= cmd(B) NL.		{ A = B; ps->state = PARSE_HEREDOC_CONTINUE; }
 
 cmd(A)	::= .		[LET]			{ A = tk(NULL); }
-cmd(A)	::= simple(B).				{ A = tk(redirect(T(B))); if (T(A) == &errornode) *statep = PARSE_ERROR; }
-cmd(A)	::= redir(B) cmd(C).	[BANG]		{ A = tk(redirect(mk(nRedir, T(B), T(C)))); if (T(A) == &errornode) *statep = PARSE_ERROR; }
+cmd(A)	::= simple(B).				{ A = tk(redirect(T(B))); if (T(A) == &errornode) ps->state = PARSE_ERROR; }
+cmd(A)	::= redir(B) cmd(C).	[BANG]		{ A = tk(redirect(mk(nRedir, T(B), T(C)))); if (T(A) == &errornode) ps->state = PARSE_ERROR; }
 cmd(A)	::= first(B) assign(C).			{ A = tk(mk(nAssign, T(B), T(C))); }
 cmd(A)	::= fn(B).				{ A = B; }
 cmd(A)	::= binder(B) nl LPAREN bindings(C) RPAREN nl cmd(D).	{ A = tk(mk(B.u.nk, T(C), T(D))); }
@@ -209,11 +255,11 @@ nlwords(A)	::= .			{ A = tk(NULL); }
 nlwords(A)	::= nlwords(B) word(C).	{ A = tk(treeconsend(T(B), T(C))); }
 nlwords(A)	::= nlwords(B) NL.	{ A = B; }
 
-nl	::= .
-nl	::= nl NL.
+nl(A)	::= .			{ A = tknone(); }
+nl(A)	::= nl NL.		{ A = tknone(); }
 
-caret 	::= .	[CARET]
-caret	::= CARET.
+caret(A)	::= .	[CARET]	{ A = tknone(); }
+caret(A)	::= CARET.	{ A = tknone(); }
 
 binder(A)	::= LOCAL.	{ A = tknk(nLocal); }
 binder(A)	::= LET.	{ A = tknk(nLet); }

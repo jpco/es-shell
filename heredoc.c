@@ -11,6 +11,21 @@ struct Here {
 	Tree *marker;
 };
 
+DefineTag(Here, static);
+
+static void *HereCopy(void *op) {
+	void *np = gcnew(Here);
+	memcpy(np, op, sizeof (Here));
+	return np;
+}
+
+static size_t HereScan(void *p) {
+	Here *here = p;
+	here->next = forward(here->next);
+	here->marker = forward(here->marker);
+	return sizeof (Here);
+}
+
 static Here *hereq;
 
 /* getherevar -- read a variable from a here doc */
@@ -133,7 +148,7 @@ extern Boolean queueheredoc(Tree *t) {
 		return FALSE;
 	}
 
-	here = gcalloc(sizeof (Here), NULL);
+	here = gcnew(Here);
 	here->next = hereq;
 	here->marker = eof;
 	hereq = here;
