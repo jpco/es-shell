@@ -159,3 +159,7 @@ extern void emptyherequeue(void) {
 	hereq = NULL;
 	disablehistory = FALSE;
 }
+
+extern void initherequeue(void) {
+	globalroot(&hereq);
+}

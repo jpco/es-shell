@@ -354,6 +354,7 @@ DefineTag(Token, static);
 static Token *mktoken(void) {
 	Token *t = gcnew(Token);
 	t->type = TK_NONE;
+	t->u.tree = NULL;
 	return t;
 }
 
@@ -406,11 +407,12 @@ extern Tree *parse(char *pr1, char *pr2) {
 	int t;
 	Ref(Tree *, parsetree, NULL);
 	Ref(Parser *, parser, mkparser());
-	Ref(Token *, token, mktoken());
 	do {
+		Ref(Token *, token, mktoken());
 		t = yylex(token);
 		gcdisable();
 		yyparse(parser, t, token, &ps);
+		RefEnd(token);
 		if (ps.parsetree != NULL)
 			parsetree = ps.parsetree;
 		gcenable();
@@ -429,7 +431,6 @@ extern Tree *parse(char *pr1, char *pr2) {
 			}
 		}
 	} while (ps.state == PARSE_CONTINUE);
-	RefEnd(token);
 	RefEnd(parser);
 
 	if (ps.state == PARSE_ERROR || error != NULL) {
