@@ -304,6 +304,11 @@ extern Boolean resetterminal;
 #endif
 
 
+/* heredoc.c */
+
+extern void initherequeue(void);
+
+
 /* opt.c */
 
 extern void esoptbegin(List *list, const char *caller, const char *usage, Boolean throws);
