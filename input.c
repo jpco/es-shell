@@ -345,6 +345,48 @@ static int fdfill(Input *in) {
 }
 
 
+/* cmdfill -- fill input buffer by running a command */
+static int cmdfill(Input *in) {
+	int oldstdin = 0;
+	List *result = NULL, *except = NULL;
+	assert(in->buf == in->bufend);
+	assert(in->fd >= 0);
+
+	/* redirect in->fd to stdin (or is it stdin to in->fd?) */
+	if (in->fd > 0) {
+		oldstdin = dup(0);
+		dup2(in->fd, 0);
+	}
+
+	/* FIXME: is in->runflags correct here? */
+	ExceptionHandler
+		result = prim("read", NULL, NULL, in->runflags);
+	CatchException (e)
+		except = e;
+	EndExceptionHandler
+
+	/* redirect back unit 0 */
+	if (oldstdin > 0)
+		dup2(oldstdin, 0);
+
+	if (result == NULL) {
+		close(in->fd);
+		in->fd = -1;
+		in->fill = eoffill;
+		in->runflags &= ~run_interactive;
+		if (except != NULL)
+			throw(except);
+		return EOF;
+	}
+
+	in->buf = in->bufbegin = (unsigned char *)mprint("%L\n", result, " ");
+	in->buflen = strlen((char *)in->buf);
+	in->bufend = in->buf + in->buflen;
+
+	return *in->buf++;
+}
+
+
 /*
  * the input loop
  */
@@ -408,11 +450,10 @@ extern Tree *parse(char *pr1, char *pr2) {
 	Ref(Tree *, parsetree, NULL);
 	Ref(Parser *, parser, mkparser());
 	do {
-		Ref(Token *, token, mktoken());
-		t = yylex(token);
+		token = mktoken();
+		t = yylex();
 		gcdisable();
-		yyparse(parser, t, token, &ps);
-		RefEnd(token);
+		yyparse(parser, t, &ps);
 		if (ps.parsetree != NULL)
 			parsetree = ps.parsetree;
 		gcenable();
@@ -755,6 +796,7 @@ extern void initinput(void) {
 	globalroot(&error);		/* parse errors */
 	globalroot(&prompt);		/* main prompt */
 	globalroot(&prompt2);		/* secondary prompt */
+	globalroot(&token);
 
 	/* mark the historyfd as a file descriptor to hold back from forked children */
 	registerfd(&historyfd, TRUE);

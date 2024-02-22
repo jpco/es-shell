@@ -75,8 +75,8 @@ static void yyreducepending(Parser *parser) {
 	}
 }
 
-void yyparse(Parser *parser, int tokentype, Token *tokendat, ParseState *ps) {
-	Parse(parser, tokentype, *tokendat, ps);
+void yyparse(Parser *parser, int tokentype, ParseState *ps) {
+	Parse(parser, tokentype, *token, ps);
 	yyreducepending(parser);
 }
 

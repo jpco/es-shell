@@ -12,6 +12,8 @@
 
 typedef enum { NW, RW, KW } State;	/* "nonword", "realword", "keyword" */
 
+Token *token;
+
 static State w = NW;
 static Boolean newline = FALSE;
 static Boolean goterror = FALSE;
@@ -143,7 +145,7 @@ static Boolean getfds(int fd[2], int c, int default0, int default1) {
 	return TRUE;
 }
 
-extern int yylex(Token *y) {
+extern int yylex() {
 	static Boolean dollar = FALSE;
 	int c;
 	size_t i;			/* The purpose of all these local assignments is to	*/
@@ -198,8 +200,8 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 		else if (streq(buf, "match"))
 			return MATCH;
 		w = RW;
-		y->type = TK_STR;
-		y->u.str = gcdup(buf);
+		token->type = TK_STR;
+		token->u.str = gcdup(buf);
 		return WORD;
 	}
 	if (c == '`' || c == '!' || c == '$' || c == '\'' || c == '=') {
@@ -249,8 +251,8 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 		}
 		UNGETC(c);
 		buf[i] = '\0';
-		y->type = TK_STR;
-		y->u.str = gcdup(buf);
+		token->type = TK_STR;
+		token->u.str = gcdup(buf);
 		return QWORD;
 	case '\\':
 		if ((c = GETC()) == '\n') {
@@ -312,8 +314,8 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 			break;
 		}
 		buf[1] = 0;
-		y->type = TK_STR;
-		y->u.str = gcdup(buf);
+		token->type = TK_STR;
+		token->u.str = gcdup(buf);
 		return QWORD;
 	case '#':
 		while ((c = GETC()) != '\n') /* skip comment until newline */
@@ -367,8 +369,8 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 			scanerror("expected digit after '='");	/* can't close a pipe */
 			return ERROR;
 		}
-		y->type = TK_TREE;
-		y->u.tree = mk(nPipe, p[0], p[1]);
+		token->type = TK_TREE;
+		token->u.tree = mk(nPipe, p[0], p[1]);
 		return PIPE;
 	}
 
@@ -413,14 +415,14 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 		if (!getfds(fd, c, fd[0], DEFAULT))
 			return ERROR;
 		if (fd[1] != DEFAULT) {
-			y->type = TK_TREE;
-			y->u.tree = (fd[1] == CLOSED)
+			token->type = TK_TREE;
+			token->u.tree = (fd[1] == CLOSED)
 					? mkclose(fd[0])
 					: mkdup(fd[0], fd[1]);
 			return DUP;
 		}
-		y->type = TK_TREE;
-		y->u.tree = mkredircmd(cmd, fd[0]);
+		token->type = TK_TREE;
+		token->u.tree = mkredircmd(cmd, fd[0]);
 		return REDIR;
 	}
 

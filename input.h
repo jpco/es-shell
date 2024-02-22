@@ -43,8 +43,10 @@ typedef struct {
 	} u;
 } Token;
 
+extern Token *token;
+
 extern const char dnw[];
-extern int yylex(Token *y);
+extern int yylex();
 extern void inityy(void);
 extern void print_prompt2(void);
 
@@ -60,7 +62,7 @@ typedef struct yyParser Parser;
 
 extern void initparse(void);
 extern Parser *mkparser(void);
-extern void yyparse(Parser *, int, Token *, ParseState *);
+extern void yyparse(Parser *, int, ParseState *);
 extern void freeparser(Parser *);
 
 #define	PARSE_CONTINUE		0
