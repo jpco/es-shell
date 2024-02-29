@@ -67,7 +67,7 @@ PRIM(fork) {
 		exit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));
 	Ref(List *, status, ewaitfor(pid));
 	SIGCHK();
-	printstatus(0, status);
+	status = reportstatus(status, binding);
 	RefReturn(status);
 }
 
@@ -90,7 +90,7 @@ static noreturn failexec(char *file, List *args) {
 }
 
 /* forkexec -- fork (if necessary) and exec */
-static List *forkexec(char *file, List *list, Boolean inchild) {
+static List *forkexec(char *file, List *list, Binding *binding, Boolean inchild) {
 	int pid;
 	Vector *env;
 	gcdisable();
@@ -108,7 +108,7 @@ static List *forkexec(char *file, List *list, Boolean inchild) {
 		termsig_newline = TRUE;
 	} else
 		SIGCHK();
-	printstatus(0, status);
+	status = reportstatus(status, binding);
 	RefReturn(status);
 }
 
@@ -118,7 +118,7 @@ PRIM(run) {
 		fail("$&run", "usage: %%run file argv0 argv1 ...");
 	Ref(List *, lp, list);
 	file = getstr(lp->term);
-	lp = forkexec(file, lp->next, (evalflags & eval_inchild) != 0);
+	lp = forkexec(file, lp->next, binding, (evalflags & eval_inchild) != 0);
 	RefReturn(lp);
 }
 
@@ -358,10 +358,10 @@ PRIM(time) {
 	pid = efork(TRUE);
 	if (pid == 0)
 		exit(exitstatus(eval(lp, NULL, evalflags | eval_inchild)));
-	status = ewait(pid, FALSE, FALSE, &r);
+	status = ewait(pid, 0, &r);
 	t1 = time(NULL);
 	SIGCHK();
-	printstatus(0, status);
+	status = reportstatus(status, binding);
 
 	eprint(
 		"%6ldr %5ld.%ldu %5ld.%lds\t%L\n",

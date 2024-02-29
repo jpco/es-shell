@@ -20,8 +20,11 @@ static int enablejobcontrol(void) {
 		return errno;
 
 	espgid = getpid();
-	if (setpgrp(0, espgid) < 0)
+	if ((getpgrp() != espgid) && (setpgrp(0, espgid) < 0))
 		return errno;
+
+	if (tcgetpgrp(0) == espgid)
+		return 0;
 
 	tstp = esignal(SIGTSTP, sig_ignore);
 	ttin = esignal(SIGTTIN, sig_ignore);
@@ -39,6 +42,9 @@ static int enablejobcontrol(void) {
 
 static int disablejobcontrol(void) {
 	assert(initpgid >= 0);
+
+	if (getpgrp() == initpgid)
+		return 0;
 
 	/* use stderr: on exit, stdin may have EOF'd */
 	if (tcsetpgrp(2, initpgid) < 0)
@@ -121,9 +127,10 @@ PRIM(makejob) {
 }
 
 /* FIXME: is it bad to send a SIGCONT to a job that's already running?
- * (i.e., we background a job then foreground it while it's running in bg */
+ * (i.e., we background a job then foreground it while it's running in bg) */
 PRIM(fgjob) {
-	int pid, pgid;
+	int pid = 0, pgid;
+
 	if (list == NULL || (list->next != NULL && list->next->next != NULL))
 		fail("$&fgjob", "usage: fgjob pid");
 	else
@@ -132,13 +139,14 @@ PRIM(fgjob) {
 	if ((pgid = pidtopgid(pid)) == 0)
 		fail("$&fgjob", "%d is not in a child pgrp of this shell", pid);
 
-	Ref(List *, status, ewait(pgid, TRUE, TRUE, NULL));
-	printstatus(0, status);
+	Ref(List *, status, ewait(pgid, (EWINTERRUPTIBLE|EWCONTINUE), NULL));
+	status = reportstatus(status, binding);
 	RefReturn(status);
 }
 
 PRIM(bgjob) {
-	int pid, pgid;
+	int pid = 0, pgid;
+
 	if (list == NULL || (list->next != NULL && list->next->next != NULL))
 		fail("$&bgjob", "usage: bgjob pid");
 	else

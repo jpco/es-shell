@@ -145,10 +145,11 @@ static Boolean scanjob(Job *job) {
 	Boolean alive = FALSE;
 	Boolean stopped = TRUE;
 	for (proc = job->proclist; proc != NULL; proc = proc->next) {
-		if (proc->alive)
+		if (proc->alive) {
 			alive = TRUE;
-		if (!proc->stopped)
-			stopped = FALSE;
+			if (!proc->stopped)
+				stopped = FALSE;
+		}
 	}
 	job->alive = alive;
 	job->stopped = stopped;
@@ -284,8 +285,8 @@ extern int pidtopgid(int pid) {
 }
 
 /* ewait -- wait for a specific process to die, or any process if pid == 0 */
-/* FIXME: clean this whole mess up.  Surely, there's a better way. */
-extern List *ewait(int pid, Boolean interruptible, Boolean cont, void *rusage) {
+/* FIXME: this function has become spaghetti nonsense.  clean it up! */
+extern List *ewait(int pid, int flags, void *rusage) {
 	Proc *proc;
 	Job *job;
 
@@ -297,18 +298,21 @@ extern List *ewait(int pid, Boolean interruptible, Boolean cont, void *rusage) {
 		espgid = getpgrp();
 		/* Do the continue after the tcsetpgrp, for race-prevention reasons. */
 		tcsetpgrp(0, pgid);
-		if (cont)
+		if (flags & EWCONTINUE)
 			if (kill(pid, SIGCONT) < 0)
 				fail("$&fgjob", "continue: %s", esstrerror(errno));
 	}
 
 	Ref(List *, lp, NULL);
 	while (true) {
+		Boolean seen_eintr = FALSE;
+		int waitpidflags = WUNTRACED | ((flags & EWNOHANG) ? WNOHANG : 0);
+
 		/* FIXME: `ewait(0, ..., TRUE, ...)` doesn't work */
 		for (proc = proclist; proc != NULL; proc = proc->next)
 			if (proc->pid == pid) {
 				if (proc->stopped) {
-					if (cont) {
+					if (flags & EWCONTINUE) {
 						proc->stopped = FALSE;
 					} else {
 						lp = mklist(mkstr(mkstatus(proc->status)), NULL);
@@ -321,7 +325,7 @@ extern List *ewait(int pid, Boolean interruptible, Boolean cont, void *rusage) {
 		for (job = joblist; job != NULL; job = job->next)
 			if (job->pgid == -pid) {
 				if (job->stopped) {
-					if (cont) {
+					if (flags & EWCONTINUE) {
 						job->stopped = FALSE;
 					} else {
 						for (proc = job->proclist; proc != NULL; proc = proc->next)
@@ -332,22 +336,26 @@ extern List *ewait(int pid, Boolean interruptible, Boolean cont, void *rusage) {
 				break;
 			}
 
-		Boolean seen_eintr = FALSE;
 		/* Hack pid 0 to -1: background procs may have been setpgid/setsid elsewhere */
-		/* FIXME: Don't wait for something that's already been stopped! */
-		while ((deadpid = dowaitpid(pid == 0 ? -1 : pid, &status, WUNTRACED)) == -1)
+		while ((deadpid = dowaitpid(pid == 0 ? -1 : pid, &status, waitpidflags)) == -1)
 			if (errno == EINTR) {
-				if (interruptible)
+				if (flags & EWINTERRUPTIBLE)
 					SIGCHK();
 				seen_eintr = TRUE;
 			} else if (errno == ECHILD && seen_eintr)
 				/* TODO: not clear on why this is necessary
 				 * (sometimes child procs disappear after SIGINT) */
 				break;
+			else if (errno == ECHILD && (flags & EWNOHANG))
+				goto cleanup;
 			else
 				fail("es:ewait", "wait: %s", esstrerror(errno));
 
 		proc = reap(deadpid, status);
+
+		if (proc == NULL)
+			/* wait nohang had nothing to report */
+			break;
 
 		if (proc->job == NULL) {
 			if (!proc->alive) {
@@ -363,6 +371,13 @@ extern List *ewait(int pid, Boolean interruptible, Boolean cont, void *rusage) {
 #endif
 			}
 			lp = mklist(mkstr(mkstatus(proc->status)), NULL);
+			if (SIFEXITED(proc->status))
+				lp = mklist(mkstr("exited"), lp);
+			else if (SIFSTOPPED(proc->status))
+				lp = mklist(mkstr("stopped"), lp);
+			else
+				lp = mklist(mkstr("signaled"), lp);
+			lp = mklist(mkstr(str("%d", proc->pid)), lp);
 			if (!proc->alive)
 				freeproc(proc);
 			break;
@@ -381,6 +396,13 @@ extern List *ewait(int pid, Boolean interruptible, Boolean cont, void *rusage) {
 			}
 			for (p = proc->job->proclist; p != NULL; p = p->next)
 				lp = mklist(mkstr(mkstatus(p->status)), lp);
+			if (SIFEXITED(proc->status))
+				lp = mklist(mkstr("exited"), lp);
+			else if (SIFSTOPPED(proc->status))
+				lp = mklist(mkstr("stopped"), lp);
+			else
+				lp = mklist(mkstr("signaled"), lp);
+			lp = mklist(mkstr(str("%d", -proc->job->pgid)), lp);
 			if (!proc->job->alive)
 				freejob(proc->job);
 			break;
@@ -405,33 +427,51 @@ cleanup:
 PRIM(apids) {
 	Proc *p;
 	Job *j;
+	int pid = (list != NULL ? atoi(getstr(list->term)) : 0);
+	if (length(list) > 1)
+		fail("$&apids", "usage: apids [pid]");
 	Ref(List *, lp, NULL);
 	for (p = proclist; p != NULL; p = p->next)
-		if (p->alive) {
+		if (p->alive && (pid == 0 || pid == p->pid)) {
 			Term *t = mkstr(str("%d", p->pid));
 			lp = mklist(t, lp);
 		}
 	for (j = joblist; j != NULL; j = j->next)
 		if (j->alive) {
-			Term *t = mkstr(str("%d", -j->pgid));
-			lp = mklist(t, lp);
+			if (pid != 0) {
+				for (p = j->proclist; p != NULL; p = p->next)
+					if (p->alive && (pid == -j->pgid || pid == p->pid)) {
+						Term *t = mkstr(str("%d", p->pid));
+						lp = mklist(t, lp);
+					}
+			} else {
+				Term *t = mkstr(str("%d", -j->pgid));
+				lp = mklist(t, lp);
+			}
 		}
 	/* TODO: sort by absolute value */
 	RefReturn(lp);
 }
 
 PRIM(wait) {
-	int pid;
-	if (list == NULL)
-		pid = 0;
-	else if (list->next == NULL) {
-		pid = atoi(getstr(list->term));
-	} else {
-		fail("$&wait", "usage: wait [pid]");
-		NOTREACHED;
+	int pid = 0;
+	int flags = EWINTERRUPTIBLE;
+	Term *pidterm = NULL;
+	if (list != NULL) {
+		if (termeq(list->term, "nohang")) {
+			flags |= EWNOHANG;
+			pidterm = (list->next == NULL ? NULL : list->next->term);
+		} else if (list->next == NULL) {
+			pidterm = list->term;
+		} else {
+			fail("$&wait", "usage: wait [nohang] [pid]");
+			NOTREACHED;
+		}
 	}
-	Ref(List *, status, ewait(pid, TRUE, FALSE, NULL));
-	printstatus(pid, status);
+	pid = (pidterm != NULL ? atoi(getstr(pidterm)) : 0);
+
+	Ref(List *, status, ewait(pid, flags, NULL));
+	status = reportstatus(status, binding);
 	RefReturn(status);
 }
 

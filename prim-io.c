@@ -234,13 +234,12 @@ PRIM(pipe) {
 
 	Ref(List *, result, NULL);
 	if (forkjob != NULL) {
-		result = ewaitfor(pids[0]);
+		result = reportstatus(ewaitfor(pids[0]), binding);
 	} else do {
 		Ref(List *, status, ewaitfor(pids[--n]));
-		result = append(status, result);
+		result = append(reportstatus(status, binding), result);
 		RefEnd(status);
 	} while (0 < n);
-	printstatus(0, result);
 	if (evalflags & eval_inchild)
 		exit(exitstatus(result));
 	RefReturn(result);
@@ -280,7 +279,7 @@ PRIM(readfrom) {
 	EndExceptionHandler
 
 	close(p[0]);
-	printstatus(0, ewaitfor(pid));
+	reportstatus(ewaitfor(pid), binding);
 	varpop(&push);
 	RefEnd3(cmd, input, var);
 	RefReturn(lp);
@@ -319,7 +318,7 @@ PRIM(writeto) {
 	EndExceptionHandler
 
 	close(p[1]);
-	printstatus(0, ewaitfor(pid));
+	reportstatus(ewaitfor(pid), binding);
 	varpop(&push);
 	RefEnd3(cmd, output, var);
 	RefReturn(lp);
@@ -365,13 +364,11 @@ PRIM(backquote) {
 	}
 
 	close(p[1]);
-	gcdisable();
 	lp = bqinput(sep, p[0]);
 	close(p[0]);
 	status = ewaitfor(pid);
-	printstatus(0, status);
+	status = reportstatus(status, binding);
 	lp = append(status, lp);
-	gcenable();
 	list = lp;
 	RefEnd2(sep, lp);
 	SIGCHK();

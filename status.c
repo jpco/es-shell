@@ -80,7 +80,7 @@ extern Boolean sifsignaled(List *status) {
 }
 
 /* printstatus -- print the status if we should */
-extern void printstatus(int pid, List *list) {
+static void printstatus(int pid, List *list) {
 	Ref(List *, lp, list);
 	for (; lp != NULL; lp = lp->next) {
 		int signum;
@@ -105,4 +105,15 @@ extern void printstatus(int pid, List *list) {
 		RefEnd(status);
 	}
 	RefEnd(lp);
+}
+
+extern List *reportstatus(List *status, Binding *binding) {
+	Ref(List *, report, varlookup("fn-%report-status", binding));
+	if (report == NULL) {
+		status = status->next->next;
+		printstatus(0, status);
+	} else
+		status = eval(append(report, status), NULL, 0);
+	RefEnd(report);
+	return status;
 }

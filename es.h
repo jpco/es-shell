@@ -210,7 +210,7 @@ extern List *true, *false;
 extern Boolean istrue(List *status);
 extern int exitstatus(List *status);
 extern char *mkstatus(int status);
-extern void printstatus(int pid, List *);
+extern List *reportstatus(List *, Binding *);
 extern Boolean sifsignaled(List *status);
 
 
@@ -223,8 +223,12 @@ extern char *checkexecutable(char *file);
 
 extern Boolean hasforked;
 extern int efork(Boolean parent);
-extern List *ewait(int pid, Boolean interruptible, Boolean cont, void *rusage);
-#define	ewaitfor(pid)	ewait(pid, FALSE, FALSE, NULL)
+
+#define	EWINTERRUPTIBLE	0x01
+#define	EWCONTINUE	0x02
+#define	EWNOHANG	0x04
+extern List *ewait(int pid, int flags, void *rusage);
+#define	ewaitfor(pid)	ewait(pid, 0, NULL)
 
 
 /* dict.c */
