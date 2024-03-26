@@ -36,13 +36,11 @@ static int historyfd = -1;
 extern void add_history(char *);
 extern int read_history(char *);
 extern void stifle_history(int);
+#endif
 
-#if ABUSED_GETENV
 static char *stdgetenv(const char *);
 static char *esgetenv(const char *);
 static char *(*realgetenv)(const char *) = stdgetenv;
-#endif
-#endif
 
 
 /*
@@ -219,8 +217,7 @@ static char *callreadline(char *prompt) {
 	SIGCHK();
 	return r;
 }
-
-#if ABUSED_GETENV
+#endif	/* READLINE */
 
 /* getenv -- fake version of getenv for readline (or other libraries) */
 static char *esgetenv(const char *name) {
@@ -254,8 +251,7 @@ static char *esgetenv(const char *name) {
 	}
 }
 
-static char *
-stdgetenv(name)
+static char *stdgetenv(name)
 	register const char *name;
 {
 	extern char **environ;
@@ -275,21 +271,14 @@ stdgetenv(name)
 	return (NULL);
 }
 
-char *
-getenv(char *name)
+extern char *getenv(const char *name)
 {
 	return realgetenv(name);
 }
 
-extern void
-initgetenv(void)
-{
+extern void initgetenv(void) {
 	realgetenv = esgetenv;
 }
-
-#endif /* ABUSED_GETENV */
-
-#endif	/* READLINE */
 
 /* fdfill -- fill input buffer by reading from a file descriptor */
 static int fdfill(Input *in) {

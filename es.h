@@ -287,6 +287,8 @@ extern Boolean isinteractive(void);
 extern void initinput(void);
 extern void resetparser(void);
 
+extern void initgetenv(void); /* FIXME: probably goes in var.c, lol */
+
 extern List *runfd(int fd, const char *name, int flags);
 extern List *runstring(const char *str, const char *name, int flags);
 
