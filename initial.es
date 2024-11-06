@@ -78,7 +78,7 @@ fn-throw	= $&throw
 fn-umask	= $&umask
 fn-wait		= $&wait
 
-fn-%read	= $&read
+fn-%read	= $&read \n
 
 #	eval runs its arguments by turning them into a code fragment
 #	(in string form) and running that fragment.

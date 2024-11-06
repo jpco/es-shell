@@ -398,14 +398,25 @@ static int read1(int fd) {
 
 PRIM(read) {
 	int c;
+	char d = 0;
 	int fd = fdmap(0);
-
 	static Buffer *buffer = NULL;
+
+	if (list == NULL || (list->next != NULL && list->next->next != NULL))
+		fail("$&read", "usage: $&read delim");
+
+	Ref(char *, ds, getstr(list->term));
+	if (ds[0] != '\0' && ds[1] != '\0')
+		fail("$&read", "usage: $&read delim");
+	if (ds[0] != '\0')
+		d = ds[0];
+	RefEnd(ds);
+
 	if (buffer != NULL)
 		freebuffer(buffer);
 	buffer = openbuffer(0);
 
-	while ((c = read1(fd)) != EOF && c != '\n')
+	while ((c = read1(fd)) != EOF && c != d)
 		buffer = bufputc(buffer, c);
 
 	if (c == EOF && buffer->current == 0) {
