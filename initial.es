@@ -136,7 +136,17 @@ fn-unwind-protect = $&noreturn @ body cleanup {
 #	and get time from /bin or wherever.
 
 if {~ <=$&primitives limit} {fn-limit = $&limit}
-if {~ <=$&primitives time}  {fn-time  = $&time}
+if {~ <=$&primitives time} {
+	fn-%time = $&time
+}
+if {~ <=$&primitives time} {
+	fn time cmd {
+		let ((r u s result) = <={%time $cmd}) {
+			echo $r^r $u^u $s^s $cmd
+			result $result
+		}
+	}
+}
 
 #	These builtins are mainly useful for internal functions, but
 #	they're there to be called if you want to use them.
