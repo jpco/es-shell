@@ -286,64 +286,68 @@ PRIM(limit) {
 #endif	/* BSD_LIMITS */
 
 #if BUILTIN_TIME
-#if HAVE_GETRUSAGE
-/* This function is provided as timersub(3) on some systems, but it's simple enough
- * to do ourselves. */
-static void timesub(struct timeval *a, struct timeval *b, struct timeval *res) {
-	res->tv_sec = a->tv_sec - b->tv_sec;
-	res->tv_usec = a->tv_usec - b->tv_usec;
-	if (res->tv_usec < 0) {
-		res->tv_sec -= 1;
-		res->tv_usec += 1000000;
-	}
-}
+
+#define DIFF_MS(sec1, ms1, sec2, ms2)  (((sec1) - (sec2)) * 1000 + ((ms1) - (ms2)))
+
+#ifdef CLOCK_MONOTONIC_RAW
+# define	ES_CLOCK	CLOCK_MONOTONIC_RAW
+#else
+# ifdef CLOCK_MONOTONIC
+#  define	ES_CLOCK	CLOCK_MONOTONIC
+# else
+#  define	ES_CLOCK	CLOCK_REALTIME
+# endif
 #endif
 
 PRIM(time) {
-	clock_t t0, t1;		/* real times */
-	struct tms tms0, tms1;	/* resource times */
-#if HAVE_GETRUSAGE
-	struct rusage cru0, cru1, sru0, sru1;
-#endif
 	long rtime_ms, utime_ms, stime_ms;
+	struct timespec ts0, ts1;		/* real-time */
+
+#if HAVE_GETRUSAGE
+	struct rusage cru0, cru1, sru0, sru1;	/* resource times if HAVE_GETRUSAGE */
+#else
+	struct tms tms0, tms1;			/* resource times if !HAVE_GETRUSAGE */
 	static clock_t ticks = 0;
+	if (ticks == 0)
+		ticks = sysconf(_SC_CLK_TCK);
+#endif
 
 	Ref(List *, result, NULL);
 	Ref(List *, lp, list);
 
-	if (ticks == 0)
-		ticks = sysconf(_SC_CLK_TCK);
-
-	gc();	/* do a garbage collection first to ensure reproducible results */
-
 #if HAVE_GETRUSAGE
 	getrusage(RUSAGE_CHILDREN, &cru0);
 	getrusage(RUSAGE_SELF, &sru0);
+#else
+	times(&tms0);
 #endif
 
-	t0 = times(&tms0);
+	if (clock_gettime(ES_CLOCK, &ts0) == -1)
+		fail("$&time", "clock_gettime: %s\n", esstrerror(errno));
 	result = eval(lp, NULL, evalflags);
-	t1 = times(&tms1);
+	if (clock_gettime(ES_CLOCK, &ts1) == -1)
+		fail("$&time", "clock_gettime: %s\n", esstrerror(errno));
 
 #if HAVE_GETRUSAGE
 	getrusage(RUSAGE_CHILDREN, &cru1);
 	getrusage(RUSAGE_SELF, &sru1);
+#else
+	times(&tms1);
 #endif
 
 	SIGCHK();
 
-	rtime_ms = ((t1 - t0) * 1000) / ticks;
+	rtime_ms = DIFF_MS(ts1.tv_sec, ts1.tv_nsec/1000000, ts0.tv_sec, ts0.tv_nsec/1000000);
 
 #if HAVE_GETRUSAGE
-	{
-		struct timeval su, cu, ss, cs;
-		timesub(&sru1.ru_utime, &sru0.ru_utime, &su);
-		timesub(&cru1.ru_utime, &cru0.ru_utime, &cu);
-		timesub(&sru1.ru_stime, &sru0.ru_stime, &ss);
-		timesub(&cru1.ru_stime, &cru0.ru_stime, &cs);
-		utime_ms = (su.tv_sec * 1000 + su.tv_usec / 1000) + (cu.tv_sec * 1000 + cu.tv_usec / 1000);
-		stime_ms = (ss.tv_sec * 1000 + ss.tv_usec / 1000) + (cs.tv_sec * 1000 + cs.tv_usec / 1000);
-	}
+	utime_ms = DIFF_MS(sru1.ru_utime.tv_sec, sru1.ru_utime.tv_usec/1000, \
+			sru0.ru_utime.tv_sec, sru0.ru_utime.tv_usec/1000);
+	utime_ms += DIFF_MS(cru1.ru_utime.tv_sec, cru1.ru_utime.tv_usec/1000, \
+			cru0.ru_utime.tv_sec, cru0.ru_utime.tv_usec/1000);
+	stime_ms = DIFF_MS(sru1.ru_stime.tv_sec, sru1.ru_stime.tv_usec/1000, \
+			sru0.ru_stime.tv_sec, sru0.ru_stime.tv_usec/1000);
+	stime_ms += DIFF_MS(sru1.ru_stime.tv_sec, sru1.ru_stime.tv_usec/1000, \
+			sru0.ru_stime.tv_sec, sru0.ru_stime.tv_usec/1000);
 #else
 	utime_ms = (((tms1.tms_utime - tms0.tms_utime) + (tms1.tms_cutime - tms0.tms_cutime)) * 1000) / ticks;
 	stime_ms = (((tms1.tms_stime - tms0.tms_stime) + (tms1.tms_cstime - tms0.tms_cstime)) * 1000) / ticks;
