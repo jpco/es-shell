@@ -7,6 +7,7 @@
 #include "syntax.h"
 %}
 
+%token <chr>	VARSYN
 %token <str>	WORD QWORD
 %token		LOCAL LET FOR CLOSURE FN
 %token <tree>	REDIR DUP
@@ -25,6 +26,7 @@
 %union {
 	Tree *tree;
 	char *str;
+	char chr;
 	NodeKind kind;
 }
 
@@ -116,10 +118,9 @@ comword	: param				{ $$ = $1; }
 	| '@' params '{' body '}'	{ $$ = mklambda($2, $4); }
 	| '$' sword			{ $$ = mk(nVar, $2); }
 	| '$' sword SUB words ')'	{ $$ = mk(nVarsub, $2, $4); }
-	| CALL sword			{ $$ = mk(nCall, $2); }
-	| COUNT sword			{ $$ = mk(nCall, prefix("%count", treecons(mk(nVar, $2), NULL))); }
-	| FLAT sword			{ $$ = flatten(mk(nVar, $2), " "); }
+	| VARSYN sword			{ $$ = varsyn($1, $2); }
 	| PRIM WORD			{ $$ = mk(nPrim, $2); }
+	| CALL sword			{ $$ = mk(nCall, $2); }
 	| '`' sword			{ $$ = backquote(mk(nVar, mk(nWord, "ifs")), $2); }
 	| BFLAT sword			{ $$ = flatten(backquote(mk(nVar, mk(nWord, "ifs")), $2), " "); }
 	| BACKBACK word	sword		{ $$ = backquote($2, $3); }

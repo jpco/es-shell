@@ -79,6 +79,20 @@ fn-umask	= $&umask
 fn-wait		= $&wait
 
 fn-%read	= $&read
+fn-%seq		= $&seq
+
+
+#	extensible syntax up here because eval uses flatten
+#	use a settor for this -- just directly calling $&varsyn won't
+#	add the syntax to the built shell
+
+set-varsyns = @ {for ((c cmd) = $*) $&varsyn $c x $cmd; result $*}
+
+varsyns = (
+	'#' {%count $x}
+	'^' {%flatten ' ' $x}
+	'?' {%nonempty x $x}
+)
 
 #	eval runs its arguments by turning them into a code fragment
 #	(in string form) and running that fragment.
@@ -343,8 +357,6 @@ fn %backquote {
 #	-- but that can be fixed and it's still better to write more of
 #	the shell in es itself.
 
-fn-%seq		= $&seq
-
 fn-%not = $&noreturn @ cmd {
 	if {$cmd} {false} {true}
 }
@@ -430,6 +442,14 @@ fn %one {
 		}
 	}
 	result $*
+}
+
+fn %nonempty name value {
+	if {~ $#value 0} {
+		throw error %nonempty 'variable '^$name^' is not set'
+	} {
+		result $value
+	}
 }
 
 #	Here documents and here strings are internally rewritten to the

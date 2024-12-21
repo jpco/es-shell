@@ -306,6 +306,68 @@ PRIM(resetterminal) {
 }
 #endif
 
+/* hack */
+extern Tree thevar;
+extern Dict *varsyns;
+
+static Tree *templatize(Tree *tree, char *var) {
+	if (tree == NULL)
+		return NULL;
+	if (tree->kind == nWord && streq(tree->u[0].s, var))
+		return &thevar;
+
+	/* ugh. */
+	switch (tree->kind) {
+	case nWord: case nQword: case nPrim:
+		return mk(tree->kind, tree->u[0].s, tree->u[1].p);
+	case nCall: case nThunk: case nVar:
+		return mk(tree->kind,
+				templatize(tree->u[0].p, var),
+				tree->u[1].p);
+	default:
+		return mk(tree->kind,
+				templatize(tree->u[0].p, var),
+				templatize(tree->u[1].p, var));
+	}
+}
+
+/* $&varsyn # x {%count $x} */
+PRIM(varsyn) {
+	char *chr = NULL, *var = NULL;
+	Closure *cmd = NULL;
+	switch (length(list)) {
+	case 0: {/* query all varsyns */
+		List *vslist = NULL;
+		dictforall(varsyns, addtolist, &vslist);
+		vslist = sortlist(vslist);
+		return vslist;
+	}
+	case 1: { /* query one varsyn value */
+		Tree *vs = dictget(varsyns, getstr(list->term));
+		if (vs == NULL)
+			return NULL;
+		return mklist(mkstr(str("$&varsyn %#E %T\t%T", list->term, &thevar, vs)), NULL);
+	}
+	case 3: /* set varsyn */
+		break;
+	default:
+		fail("$&varsyn", "usage: $&varsyn char var cmd");
+	}
+
+	if (strlen((chr = getstr(list->term))) != 1)
+		fail("$&varsyn", "char must be a char");
+
+	/* FIXME: check that chr is a valid value */
+
+	/* validity check on this? */
+	var = getstr(list->next->term);
+
+	cmd = getclosure(list->next->next->term);
+
+	varsyns = dictput(varsyns, chr, templatize(cmd->tree, var));
+	return ltrue;
+}
+
 
 /*
  * initialization
@@ -329,6 +391,7 @@ extern Dict *initprims_etc(Dict *primdict) {
 	X(home);
 	X(setnoexport);
 	X(vars);
+	X(varsyn);
 	X(internals);
 	X(result);
 	X(isinteractive);

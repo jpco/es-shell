@@ -31,6 +31,8 @@ extern Tree *firstprepend(Tree *first, Tree *args);
 
 extern Tree *mkmatch(Tree *subj, Tree *cases);
 
+extern Tree *varsyn(char c, Tree *names);
+
 /* heredoc.c */
 
 extern Boolean readheredocs(Boolean endfile);

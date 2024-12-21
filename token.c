@@ -221,12 +221,15 @@ top:	while ((c = GETC()) == ' ' || c == '\t')
 		return '`';
 	case '$':
 		dollar = TRUE;
-		switch (c = GETC()) {
-		case '#':	return COUNT;
-		case '^':	return FLAT;
-		case '&':	return PRIM;
-		default:	UNGETC(c); return '$';
+		if ((c = GETC()) == '&')
+			return PRIM;
+		/* XXX: Think through which chars are allowed here */
+		if (dnw[(unsigned char) c] && c != '(' && c != '$' && c != '\'') {
+			y->chr = c;
+			return VARSYN;
 		}
+		UNGETC(c);
+		return '$';
 	case '\'':
 		w = RW;
 		i = 0;

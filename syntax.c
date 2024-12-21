@@ -6,11 +6,18 @@
 #include "token.h"
 
 Tree errornode;
+Tree thevar = { nWord, {{.s = "!var!" }} };
+
 Tree *parsetree;
+
+Dict *varsyns;
 
 /* initparse -- called at the dawn of time */
 extern void initparse(void) {
 	globalroot(&parsetree);
+
+	globalroot(&varsyns);
+	varsyns = mkdict();
 }
 
 /* treecons -- create new tree list cell */
@@ -219,6 +226,43 @@ extern Tree *redirappend(Tree *tree, Tree *r) {
 	assert(t == NULL || t->kind == nList);
 	*tp = mk(nRedir, r, t);
 	return tree;
+}
+
+static Tree *instantiate(Tree *template, Tree *value) {
+	if (template == NULL)
+		return NULL;
+
+	if (template == &thevar)
+		return value;
+
+	/* ugh. */
+	switch (template->kind) {
+	case nWord: case nQword: case nPrim:
+		return mk(template->kind, template->CAR, template->CDR);
+	case nCall: case nThunk: case nVar:
+		return mk(template->kind,
+				instantiate(template->CAR, value),
+				template->CDR);
+	default:
+		return mk(template->kind,
+				instantiate(template->CAR, value),
+				instantiate(template->CDR, value));
+	}
+}
+
+/* varsyn -- make a custom function call based on variable-syntax-like input */
+extern Tree *varsyn(char c, Tree *name) {
+	char cc[2];
+	Tree *template;
+	cc[0] = c;
+	cc[1] = '\0';
+
+	template = dictget(varsyns, cc);
+	if (template == NULL) {
+		yyerror("unknown variable syntax character");
+		return NULL;
+	}
+	return mk(nCall, instantiate(template, name));
 }
 
 /* mkmatch -- rewrite match as appropriate if with ~ commands */
