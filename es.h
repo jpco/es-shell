@@ -150,7 +150,6 @@ extern Binding *reversebindings(Binding *binding);
 /* eval.c */
 
 extern Binding *bindargs(Tree *params, List *args, Binding *binding);
-extern List *forkexec(char *file, List *list, Boolean inchild);
 extern List *walk(Tree *tree, Binding *binding, int flags);
 extern List *eval(List *list, Binding *binding, int flags);
 extern List *eval1(Term *term, int flags);
@@ -211,7 +210,7 @@ extern List *ltrue, *lfalse;
 extern Boolean istrue(List *status);
 extern int exitstatus(List *status);
 extern char *mkstatus(int status);
-extern void printstatus(int pid, int status);
+extern void printstatus(int pid, char *state, List *status);
 
 
 /* access.c */
@@ -222,11 +221,12 @@ extern char *checkexecutable(char *file);
 /* proc.c */
 
 extern Boolean hasforked;
+extern int *forkpgid;
 extern int efork(Boolean parent);
 extern pid_t spgrp(pid_t pgid);
 extern int tctakepgrp(void);
 extern void initpgrp(void);
-extern int ewait(int pid, int opts);
+extern List *ewait(int pid, int opts);
 #define	ewaitfor(pid)	ewait(pid, 0)
 
 #if JOB_PROTECT
@@ -347,7 +347,7 @@ extern char *sigmessage(int sig);
 
 #define	SIGCHK() sigchk()
 typedef enum {
-	sig_nochange, sig_catch, sig_default, sig_ignore, sig_noop, sig_special
+	sig_nochange, sig_catch, sig_default, sig_pgrp_noop, sig_ignore, sig_noop, sig_special
 } Sigeffect;
 extern Sigeffect esignal(int sig, Sigeffect effect);
 extern void setsigeffects(const Sigeffect effects[]);
@@ -359,7 +359,7 @@ extern jmp_buf slowlabel;
 extern Boolean sigint_newline;
 extern void sigchk(void);
 extern Boolean issilentsignal(List *e);
-extern void setsigdefaults(void);
+extern void setsigdefaults(Boolean newpgrp);
 extern void blocksignals(void);
 extern void unblocksignals(void);
 
@@ -515,7 +515,7 @@ extern List *raised(List *e);
 		_localhandler.up = tophandler; \
 		tophandler = &_localhandler; \
 		if (!setjmp(_localhandler.label)) {
-	
+
 #define CatchException(e) \
 			pophandler(&_localhandler); \
 		} else { \

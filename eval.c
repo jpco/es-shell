@@ -4,46 +4,6 @@
 
 unsigned long evaldepth = 0, maxevaldepth = MAXmaxevaldepth;
 
-static Noreturn failexec(char *file, List *args) {
-	List *fn;
-	assert(gcisblocked());
-	fn = varlookup("fn-%exec-failure", NULL);
-	if (fn != NULL) {
-		int olderror = errno;
-		Ref(List *, list, append(fn, mklist(mkstr(file), args)));
-		RefAdd(file);
-		gcenable();
-		RefRemove(file);
-		eval(list, NULL, 0);
-		RefEnd(list);
-		errno = olderror;
-	}
-	eprint("%s: %s\n", file, esstrerror(errno));
-	esexit(1);
-}
-
-/* forkexec -- fork (if necessary) and exec */
-extern List *forkexec(char *file, List *list, Boolean inchild) {
-	int pid, status;
-	Vector *env;
-	gcdisable();
-	env = mkenv();
-	pid = efork(!inchild);
-	if (pid == 0) {
-		execve(file, vectorize(list)->vector, env->vector);
-		failexec(file, list);
-	}
-	gcenable();
-	status = ewaitfor(pid);
-	if ((status & 0xff) == 0) {
-		sigint_newline = FALSE;
-		SIGCHK();
-		sigint_newline = TRUE;
-	} else
-		SIGCHK();
-	return mklist(mkterm(mkstatus(status), NULL), NULL);
-}
-
 /* assign -- bind a list of values to a list of variables */
 static List *assign(Tree *varform, Tree *valueform0, Binding *binding0) {
 	Ref(List *, result, NULL);
@@ -401,7 +361,7 @@ restart:
 				if (funcname != NULL)
 					varpop(&p);
 				RefEnd2(context, tree);
-	
+
 			CatchException (e)
 
 				if (termeq(e->term, "return")) {
@@ -448,9 +408,11 @@ restart:
 		char *error = checkexecutable(name);
 		if (error != NULL)
 			fail("$&whatis", "%s: %s", name, error);
-		list = forkexec(name, list, flags & eval_inchild);
+		gcdisable();
+		list = mklist(mkstr("%run"), mklist(mkstr(name), list));
+		gcenable();
 		RefPop(name);
-		goto done;
+		goto restart;
 	}
 	RefEnd(name);
 
@@ -458,8 +420,10 @@ restart:
 	if (fn != NULL && fn->next == NULL
 	    && (cp = getclosure(fn->term)) == NULL) {
 		char *name = getstr(fn->term);
-		list = forkexec(name, list, flags & eval_inchild);
-		goto done;
+		gcdisable();
+		list = mklist(mkstr("%run"), mklist(mkstr(name), list));
+		gcenable();
+		goto restart;
 	}
 
 	list = append(fn, list->next);

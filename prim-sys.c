@@ -23,40 +23,106 @@
 #include <sys/stat.h>
 
 PRIM(newpgrp) {
-	int e;
+	int e, fp;
 	pid_t pgid;
-	if (list != NULL)
-		fail("$&newpgrp", "usage: newpgrp");
-	pgid = spgrp(getpid());
-	if ((e = tctakepgrp()) != 0) {
-		spgrp(pgid);
-		fail("$&newpgrp", "newpgrp: %s", esstrerror(e));
+	static Boolean in_newpgrp = FALSE;
+
+	if (list == NULL) {
+		pgid = spgrp(getpid());
+		if ((e = tctakepgrp()) != 0) {
+			spgrp(pgid);
+			fail("$&newpgrp", "newpgrp: %s", esstrerror(e));
+		}
+		return ltrue;
 	}
-	return ltrue;
+
+	if (in_newpgrp)
+		return eval(list, NULL, evalflags);
+
+	in_newpgrp = TRUE;
+	fp = 0;
+	forkpgid = &fp;
+
+	ExceptionHandler
+		list = eval(list, NULL, evalflags);
+	CatchException (e)
+		forkpgid = NULL;
+		in_newpgrp = FALSE;
+		throw(e);
+	EndExceptionHandler
+
+	in_newpgrp = FALSE;
+	forkpgid = NULL;
+	return list;
 }
 
 PRIM(background) {
 	int pid = efork(TRUE);
 	if (pid == 0) {
+		if (forkpgid == NULL) {
 #if JOB_PROTECT
-		/* job control safe version: put it in a new pgroup, if interactive. */
-		if (isinteractive())
-			setpgid(0, 0);
+			/* job control safe version: put it in a new pgroup, if interactive. */
+			if (isinteractive())
+				setpgid(0, 0);
 #endif
-		mvfd(eopen("/dev/null", oOpen), 0);
+			mvfd(eopen("/dev/null", oOpen), 0);
+		}
 		esexit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));
 	}
 	return mklist(mkstr(str("%d", pid)), NULL);
 }
 
 PRIM(fork) {
-	int pid, status;
+	int pid;
+	List *status;
 	pid = efork(TRUE);
 	if (pid == 0)
 		esexit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));
 	status = ewaitfor(pid);
 	SIGCHK();
-	return mklist(mkstr(mkstatus(status)), NULL);
+	return status;
+}
+
+static Noreturn failexec(char *file, List *args) {
+	List *fn;
+	assert(gcisblocked());
+	fn = varlookup("fn-%exec-failure", NULL);
+	if (fn != NULL) {
+		int olderror = errno;
+		Ref(List *, list, append(fn, mklist(mkstr(file), args)));
+		RefAdd(file);
+		gcenable();
+		RefRemove(file);
+		eval(list, NULL, 0);
+		RefEnd(list);
+		errno = olderror;
+	}
+	eprint("%s: %s\n", file, esstrerror(errno));
+	esexit(1);
+}
+
+/* forkexec -- fork (if necessary) and exec */
+static List *forkexec(char *file, List *list, Boolean inchild) {
+	int pid;
+	List *status;
+	Vector *env;
+	gcdisable();
+	env = mkenv();
+	pid = efork(!inchild);
+	if (pid == 0) {
+		execve(file, vectorize(list)->vector, env->vector);
+		failexec(file, list);
+	}
+	gcenable();
+	status = ewaitfor(pid);
+	/* FIXME: this is ugly and doesn't even work */
+	/* if (!hasprefix(str("%L", status, ""), "sig")) {
+		sigint_newline = FALSE;
+		SIGCHK();
+		sigint_newline = TRUE;
+	} else */
+		SIGCHK();
+	return status;
 }
 
 PRIM(run) {
@@ -113,6 +179,7 @@ PRIM(setsignals) {
 		switch (*s) {
 		case '-':	effect = sig_ignore;	s++; break;
 		case '/':	effect = sig_noop;	s++; break;
+		case '+':	effect = sig_pgrp_noop;	s++; break;
 		case '.':	effect = sig_special;	s++; break;
 		}
 		sig = signumber(s);
@@ -324,7 +391,8 @@ static void timesub(struct timeval *a, struct timeval *b, struct timeval *res) {
 PRIM(time) {
 #if HAVE_GETRUSAGE
 
-	int pid, status;
+	int pid;
+	List *status;
 	time_t t0, t1;
 	struct rusage ru_prev, ru_new, ru_diff;
 
@@ -353,11 +421,12 @@ PRIM(time) {
 	);
 
 	RefEnd(lp);
-	return mklist(mkstr(mkstatus(status)), NULL);
+	return status;
 
 #else	/* !HAVE_GETRUSAGE */
 
-	int pid, status;
+	int pid;
+	List *status;
 	Ref(List *, lp, list);
 
 	gc();	/* do a garbage collection first to ensure reproducible results */
@@ -389,13 +458,13 @@ PRIM(time) {
 			tms.tms_cstime / ticks, ((tms.tms_cstime * 10) / ticks) % 10,
 			lp, " "
 		);
-		esexit(status);
+		esexit(exitstatus(status));
 	}
 	status = ewaitfor(pid);
 	SIGCHK();
 
 	RefEnd(lp);
-	return mklist(mkstr(mkstatus(status)), NULL);
+	return status;
 
 #endif	/* !HAVE_GETRUSAGE */
 }

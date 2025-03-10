@@ -18,6 +18,32 @@ test 'exit status' {
 # 		let (status = <={wait $pid >[2] /dev/null})
 # 			assert {~ $status sigquit+core}
 # 	}
+
+	let (status = <={result 1 | result 2 | result 3})
+		assert {~ $#status 3 && ~ $^status '1 2 3'}
+}
+
+test 'flag handling' {
+	catch @ e type msg {
+		assert {~ $e error} 'wait -c with no pid throws an error'
+	} {
+		wait -c
+		assert false 'wait -c with no pid throws an error'
+	}
+
+	catch @ e type msg {
+		assert {~ $e error} 'wait -c with no pid throws an error'
+	} {
+		wait -cn
+		assert false 'wait -cn with no pid throws an error'
+	}
+
+	catch @ e type msg {
+		assert false 'wait -n with no pid does not throw'
+	} {
+		let (r = <={wait -n})
+		assert {~ $r ()} 'wait -n with no pid returns an empty list'
+	}
 }
 
 test 'wait is precise' {

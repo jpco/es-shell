@@ -113,6 +113,8 @@ extern Sigeffect esignal(int sig, Sigeffect effect) {
 	old = sigeffect[sig];
 	if (effect != sig_nochange && effect != old) {
 		switch (effect) {
+		case sig_noop:
+		case sig_pgrp_noop:
 		case sig_ignore:
 			if (setsignal(sig, SIG_IGN) == SIG_ERR) {
 				eprint("$&setsignals: cannot ignore %s\n", signame(sig));
@@ -126,7 +128,6 @@ extern Sigeffect esignal(int sig, Sigeffect effect) {
 			}
 			FALLTHROUGH;
 		case sig_catch:
-		case sig_noop:
 			if (setsignal(sig, catcher) == SIG_ERR) {
 				eprint("$&setsignals: cannot catch %s\n", signame(sig));
 				return old;
@@ -214,11 +215,13 @@ extern void initsignals(Boolean interactive, Boolean allowdumps) {
 	varpop(&settor);
 }
 
-extern void setsigdefaults(void) {
+extern void setsigdefaults(Boolean newpgrp) {
 	int sig;
 	for (sig = 1; sig < NSIG; sig++) {
 		Sigeffect e = sigeffect[sig];
 		if (e == sig_catch || e == sig_noop || e == sig_special)
+			esignal(sig, sig_default);
+		if (newpgrp && e == sig_pgrp_noop)
 			esignal(sig, sig_default);
 	}
 }
@@ -247,6 +250,7 @@ extern List *mksiglist(void) {
 		case sig_catch:		prefix = '\0';	break;
 		case sig_ignore:	prefix = '-';	break;
 		case sig_noop:		prefix = '/';	break;
+		case sig_pgrp_noop:	prefix = '+';	break;
 		case sig_special:	prefix = '.';	break;
 		}
 		Ref(char *, name, signame(sig));
@@ -317,8 +321,6 @@ extern void sigchk(void) {
 		while (gcisblocked())
 			gcenable();
 		throw(e);
-	case sig_noop:
-		break;
 	default:
 		/* panic("sigchk: caught %L with sigeffect %d", e, " ", sigeffect[sig]); */
 		break;
