@@ -54,6 +54,8 @@ extern int exitstatus(List *status) {
 
 /* mkstatus -- turn a unix exit(2) status into a string */
 extern char *mkstatus(int status) {
+	if (WIFSTOPPED(status))
+		return "stopped";
 	if (WIFSIGNALED(status)) {
 		char *name = signame(WTERMSIG(status));
 		if (WCOREDUMP(status))
@@ -64,13 +66,12 @@ extern char *mkstatus(int status) {
 }
 
 /* printstatus -- print the status if we should */
-extern void printstatus(int pid, int status) {
+extern void printstatus(int pid, char *state, List *status) {
 	Ref(List *, fn, varlookup("fn-%echo-status", NULL));
 	Ref(List *, list, NULL);
 	if (fn != NULL) {
 		gcdisable();
-		list = mklist(mkstr(mkstatus(status)), NULL);
-		list = mklist(mkstr((WIFSIGNALED(status) ? "signaled" : "exited")), list);
+		list = mklist(mkstr(state), status);
 		list = mklist(mkstr(str("%d", pid)), list);
 		gcenable();
 		eval(append(fn, list), NULL, 0);

@@ -160,7 +160,7 @@ static int pipefork(int p[2], int *extra) {
 }
 
 PRIM(here) {
-	int fd, doclen, p[2], status, ticket = UNREGISTERED;
+	int fd, doclen, p[2], ticket = UNREGISTERED;
 	volatile int pid = -1;
 	List *tail, **tailp;
 
@@ -205,10 +205,8 @@ PRIM(here) {
 
 	undefer(ticket);
 	close(p[0]);
-	if (pid > 0) {
-		status = ewaitfor(pid);
-		printstatus(0, status);
-	}
+	if (pid > 0)
+		ewaitfor(pid);
 	RefEnd2(cmd, doc);
 	RefReturn(lp);
 }
@@ -261,12 +259,12 @@ PRIM(pipe) {
 	}
 
 	Ref(List *, result, NULL);
-	do {
+	if (forkpgid != NULL)
+		result = ewaitfor(pids[0]);
+	else do {
 		int pid = pids[--n];
-		Term *t;
-		int status = ewaitfor(pid);
-		t = mkstr(mkstatus(status));
-		result = mklist(t, result);
+		List *r = ewaitfor(pid);
+		result = append(r, result);
 	} while (0 < n);
 	if (evalflags & eval_inchild)
 		esexit(exitstatus(result));
@@ -374,8 +372,9 @@ restart:
 }
 
 PRIM(backquote) {
-	int pid, p[2], status;
-	
+	int pid, p[2];
+	List *status;
+
 	caller = "$&backquote";
 	if (list == NULL)
 		fail(caller, "usage: backquote separator command [args ...]");
@@ -395,7 +394,7 @@ PRIM(backquote) {
 	close(p[0]);
 	status = ewaitfor(pid);
 	gcdisable();
-	lp = mklist(mkstr(mkstatus(status)), lp);
+	lp = append(status, lp);
 	gcenable();
 	list = lp;
 	RefEnd2(sep, lp);
