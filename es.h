@@ -356,7 +356,7 @@ extern List *mksiglist(void);
 extern void initsignals(Boolean interactive, Boolean allowdumps);
 extern Atomic slow, interrupted;
 extern jmp_buf slowlabel;
-extern Boolean sigint_newline;
+extern Boolean termsig_newline;
 extern void sigchk(void);
 extern Boolean issilentsignal(List *e);
 extern void setsigdefaults(Boolean newpgrp);

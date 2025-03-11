@@ -117,9 +117,9 @@ static List *forkexec(char *file, List *list, Boolean inchild) {
 	status = ewaitfor(pid);
 	/* FIXME: this is ugly and doesn't even work */
 	/* if (!hasprefix(str("%L", status, ""), "sig")) {
-		sigint_newline = FALSE;
+		termsig_newline = FALSE;
 		SIGCHK();
-		sigint_newline = TRUE;
+		termsig_newline = TRUE;
 	} else */
 		SIGCHK();
 	return status;

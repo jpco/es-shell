@@ -5,7 +5,7 @@
 
 typedef void (*Sighandler)(int);
 
-Boolean sigint_newline = TRUE;
+Boolean termsig_newline = TRUE;
 
 jmp_buf slowlabel;
 Atomic slow = FALSE;
@@ -313,11 +313,11 @@ extern void sigchk(void) {
 			gcenable();
 		throw(e);
 	case sig_special:
-		assert(sig == SIGINT);
+		assert(sig == SIGINT || sig == SIGTSTP || sig == SIGQUIT);
 		/* this is the newline you see when you hit ^C while typing a command */
-		if (sigint_newline)
+		if (termsig_newline)
 			eprint("\n");
-		sigint_newline = TRUE;
+		termsig_newline = TRUE;
 		while (gcisblocked())
 			gcenable();
 		throw(e);
