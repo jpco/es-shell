@@ -66,12 +66,14 @@ extern char *mkstatus(int status) {
 }
 
 /* printstatus -- print the status if we should */
-extern void printstatus(int pid, char *state, List *status) {
+extern void printstatus(int pid, int status, List *statuslist) {
 	Ref(List *, fn, varlookup("fn-%echo-status", NULL));
 	Ref(List *, list, NULL);
 	if (fn != NULL) {
+		char *state = WIFSTOPPED(status) ? "stopped"
+				: (WIFSIGNALED(status) ? "signaled" : "exited");
 		gcdisable();
-		list = mklist(mkstr(state), status);
+		list = mklist(mkstr(state), statuslist);
 		list = mklist(mkstr(str("%d", pid)), list);
 		gcenable();
 		eval(append(fn, list), NULL, 0);

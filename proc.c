@@ -26,8 +26,7 @@ static pid_t espgid;
 static pid_t tcpgid0;
 #endif
 
-/* mkproc -- create a Proc structure */
-extern Proc *mkproc(int pid) {
+static Proc *mkproc(int pid) {
 	Proc *proc = ealloc(sizeof (Proc));
 	proc->next = proclist;
 	proc->pid = pid;
@@ -37,52 +36,48 @@ extern Proc *mkproc(int pid) {
 	return proc;
 }
 
+static int setchildpgrp(int pid) {
+	if (forkpgid == NULL)
+		return 0;
+	if (*forkpgid == 0)
+		*forkpgid = (pid != 0 ? pid : getpid());
+	if (setpgid(pid, *forkpgid) < 0)
+		fail("es:efork", "setpgid: %s", esstrerror(errno));
+	return *forkpgid;
+}
+
 /* efork -- fork (if necessary) and clean up as appropriate */
 extern int efork(Boolean parent) {
-	int pid;
 	Boolean childpgrp = FALSE;
-	if (!parent)
-		goto cleanup;
-	pid = fork();
-	switch (pid) {
-	default: {	/* parent */
-		Proc *proc = mkproc(pid);
-		if (forkpgid != NULL) {
-			if (*forkpgid == 0)
-				*forkpgid = pid;
-			proc->pgid = *forkpgid;
-			if (setpgid(pid, proc->pgid) < 0)
-				fail("es:efork", "setpgid: %s", esstrerror(errno));
+	if (parent) {
+		int pid = fork();
+		switch (pid) {
+		default: {	/* parent */
+			Proc *proc = mkproc(pid);
+			proc->pgid = setchildpgrp(pid);
+			if (proclist != NULL)
+				proclist->prev = proc;
+			proclist = proc;
+			return pid;
 		}
-		if (proclist != NULL)
-			proclist->prev = proc;
-		proclist = proc;
-		return pid;
-	}
-	case 0:		/* child */
-		if (forkpgid != NULL) {
-			if (setpgid(0, (*forkpgid != 0) ? *forkpgid : getpid()) < 0) {
-				eprint("child setpgid: %s", esstrerror(errno));
-				esexit(1);
+		case 0:		/* child */
+			while (proclist != NULL) {
+				Proc *p = proclist;
+				proclist = proclist->next;
+				efree(p);
 			}
-			childpgrp = TRUE;
+			if (setchildpgrp(0))
+				childpgrp = TRUE;
 			forkpgid = NULL;
-		}
-		while (proclist != NULL) {
-			Proc *p = proclist;
-			proclist = proclist->next;
-			efree(p);
-		}
-		hasforked = TRUE;
+			hasforked = TRUE;
 #if JOB_PROTECT
-		tcpgid0 = 0;
+			tcpgid0 = 0;
 #endif
-		break;
-	case -1:
-		fail("es:efork", "fork: %s", esstrerror(errno));
+			break;
+		case -1:
+			fail("es:efork", "fork: %s", esstrerror(errno));
+		}
 	}
-
-cleanup:
 	closefds();
 	setsigdefaults(childpgrp);
 	newchildcatcher();
@@ -146,7 +141,7 @@ extern Noreturn esexit(int code) {
 /* dowait -- a waitpid wrapper that interfaces with signals */
 static int dowait(int pid, int opts, int *statusp) {
 	int n;
-	int waitopts = /* WCONTINUED | */ WUNTRACED;
+	volatile int waitopts = /* WCONTINUED | */ WUNTRACED;
 	if (opts & EWNOHANG)
 		waitopts |= WNOHANG;
 	interrupted = FALSE;
@@ -165,7 +160,7 @@ static int dowait(int pid, int opts, int *statusp) {
 }
 
 /* reap -- mark a process's state, pull it out of proclist, and return status */
-static List *reap(int *pid, int status, char **state) {
+static List *reap(int *pid, int status) {
 	int deadpid, deadpgid;
 	Proc *proc, *p;
 	procstate pgidstate = DEAD;
@@ -187,10 +182,6 @@ static List *reap(int *pid, int status, char **state) {
 	else
 		proc->state = DEAD;
 	proc->status = status;
-
-	*state = (WIFSTOPPED(status) ? "stopped"
-			: WIFSIGNALED(status) ? "signaled"
-			: "exited");
 
 	for (p = proclist; p != NULL; p = p->next) {
 		if ((p->pgid < 1 && p->pid != deadpid) || (p->pgid != deadpgid))
@@ -248,17 +239,12 @@ static int pidtopgid(int pid) {
  * change to a list of Proc *s or a custom ealloc'd status struct! */
 extern List *ewait(int pa, int opts) {
 	int status, deadpid;
-	volatile Boolean returnnull = FALSE;
-	char *volatile state = NULL;
+	volatile Boolean nostatus = FALSE;
 	volatile int pidarg = (pa == 0) ? -1 : pidtopgid(pa);
 	Ref(List *, statuslist, NULL);
 
 	if (pidarg < -1)
 		tcspgrp(-pidarg);
-
-	/* TODO: make sure these exceptions are formatted ok */
-	/* TODO: returnnull is a gross hack. fix that */
-	/* TODO: 'state' is also a gross hack. fix that */
 
 	ExceptionHandler
 
@@ -271,28 +257,24 @@ extern List *ewait(int pa, int opts) {
 		}
 
 		do {
-			while ((deadpid = dowait(pidarg, (opts & EWNOHANG), &status)) == -1) {
-				if (errno == ECHILD) {
-					if ((opts & EWNOHANG) && pidarg == -1) {
-						returnnull = TRUE;
-						deadpid = 0;
-						break;
-					}
-					if (pidarg != -1)
-						fail("es:ewait", "wait: %d is not a child of this shell", pidarg);
-				}
-				if (errno != EINTR)
-					fail("es:ewait", "wait: %s", esstrerror(errno));
+			while ((deadpid = dowait(pidarg, opts, &status)) == -1 && errno == EINTR)
 				if (opts & EWINTERRUPTIBLE)
 					SIGCHK();
-			}
-			if (deadpid == 0) {	/* dowait(EWNOHANG) returned nothing */
-				returnnull = TRUE;
+			switch (deadpid) {
+			case -1:
+				if (errno == ECHILD && pidarg != -1)
+					fail("es:ewait", "wait: %d is not a child of this shell", pidarg);
+				else if (errno != ECHILD || (opts & EWNOHANG) == 0)
+					fail("es:ewait", "wait: %s", esstrerror(errno));
+				deadpid = 0;
+				FALLTHROUGH;
+			case 0:		/* dowait(EWNOHANG) returned nothing */
+				nostatus = TRUE;
 				break;
+			default:
+				statuslist = reap(&deadpid, status);
 			}
-			if (!returnnull)
-				statuslist = reap(&deadpid, status, (char **) &state);
-		} while (statuslist == NULL);
+		} while (!nostatus && statuslist == NULL);
 
 	CatchException (e)
 
@@ -306,13 +288,13 @@ extern List *ewait(int pa, int opts) {
 #if JOB_PROTECT
 	tctakepgrp();
 #endif
-	if (returnnull) {
+	if (nostatus) {
 		RefPop(statuslist);
 		return NULL;
 	}
 	/* has to be down here because we need to have the terminal back before printing anything */
 	/* should this be called even when returning NULL? */
-	printstatus(deadpid, state, statuslist);
+	printstatus(deadpid, status, statuslist);
 	RefReturn(statuslist);
 }
 

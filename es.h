@@ -210,7 +210,7 @@ extern List *ltrue, *lfalse;
 extern Boolean istrue(List *status);
 extern int exitstatus(List *status);
 extern char *mkstatus(int status);
-extern void printstatus(int pid, char *state, List *status);
+extern void printstatus(int pid, int status, List *statuslist);
 
 
 /* access.c */
