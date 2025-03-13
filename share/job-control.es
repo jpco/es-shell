@@ -66,10 +66,7 @@ fn %pipe {
 let (b = $fn-%background)
 fn %background {
 	if %is-interactive {
-		let (r = <={newpgrp $b $*}) {
-			last-job = $apid
-			result $r
-		}
+		newpgrp $b $*
 	} {
 		$b $*
 	}
@@ -106,18 +103,18 @@ fn apids {
 	echo <={%apids $*}
 }
 
-# This extension to %echo-status sets the last-job variable and prints something
-# appropriate for stopped processes.  The last-job variable is used to make `fg'
-# and `bg' more convenient, not requiring a user to pick out the relevant -pgid
-# for the stopped job every time.
+# This extension to %echo-status sets the apid variable and prints something
+# appropriate for stopped processes.  $apid is used wiht job control to make
+# `fg' and `bg' more convenient, not requiring a user to pick out the relevant
+# -pgid for the stopped job every time.
 
 fn %echo-status pid did status {
-	if {~ $pid $last-job && !~ $did stopped} {
-		last-job = ()
+	if {~ $pid $apid && !~ $did stopped} {
+		apid = ()
 	}
 	let (msg = <={if {$echo-status-pid} {result $pid^': '} {result ''}})
 	if {~ $did stopped} {
-		last-job = $pid
+		apid = $pid
 		echo >[1=2] $msg^'stopped'
 	} {~ $did signaled} {
 		msg = $msg^<={$&sigmessage $status}
@@ -128,11 +125,9 @@ fn %echo-status pid did status {
 	}
 }
 
-noexport = $noexport last-job
-
 # fg and bg continue a stopped process group (job) in the foreground or
 # background, respectively.  If called without an argument, they use the
-# last-job variable if available.  Both functions make use of flags on the
+# apid variable if available.  Both functions make use of flags on the
 # $&wait primitive, which is what does the heavy lifting.
 #
 # Part of the job-control-capable es' duties is foregrounding, or "giving the
@@ -153,7 +148,7 @@ noexport = $noexport last-job
 
 fn fg pid {
 	if {~ $pid ()} {
-		pid = $last-job
+		pid = $apid
 	}
 	if {~ $pid ()} {
 		throw error fg usage: fg pid
@@ -164,12 +159,12 @@ fn fg pid {
 
 fn bg pid {
 	if {~ $pid ()} {
-		pid = $last-job
+		pid = $apid
 	}
 	if {~ $pid ()} {
 		throw error bg usage: bg pid
 	} {
-		last-job = $pid
+		apid = $pid
 		$&wait -nc $pid
 	}
 }
