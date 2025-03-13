@@ -2,12 +2,14 @@
 
 #include "es.h"
 
+#define	EWINTERRUPTIBLE	1
+#define	EWPRINTSTATUS	2
+
 Boolean hasforked = FALSE;
 
 typedef struct Proc Proc;
 struct Proc {
 	int pid;
-	Boolean background;
 	Proc *next, *prev;
 };
 
@@ -19,23 +21,21 @@ static pid_t espgid;
 static pid_t tcpgid0;
 #endif
 
-/* mkproc -- create a Proc structure */
-extern Proc *mkproc(int pid, Boolean background) {
+static Proc *mkproc(int pid) {
 	Proc *proc = ealloc(sizeof (Proc));
 	proc->next = proclist;
 	proc->pid = pid;
-	proc->background = background;
 	proc->prev = NULL;
 	return proc;
 }
 
 /* efork -- fork (if necessary) and clean up as appropriate */
-extern int efork(Boolean parent, Boolean background) {
+extern int efork(Boolean parent) {
 	if (parent) {
 		int pid = fork();
 		switch (pid) {
 		default: {	/* parent */
-			Proc *proc = mkproc(pid, background);
+			Proc *proc = mkproc(pid);
 			if (proclist != NULL)
 				proclist->prev = proc;
 			proclist = proc;
@@ -135,7 +135,7 @@ static int dowait(int pid, int *statusp) {
 }
 
 /* reap -- mark a process as dead and return it */
-static Proc *reap(int pid) {
+static void reap(int pid) {
 	Proc *proc;
 	for (proc = proclist; proc != NULL; proc = proc->next)
 		if (proc->pid == pid)
@@ -147,28 +147,27 @@ static Proc *reap(int pid) {
 		proc->prev->next = proc->next;
 	else
 		proclist = proc->next;
-	return proc;
+	efree(proc);
 }
 
 /* ewait -- wait for a specific process to die, or any process if pid == -1 */
-extern int ewait(int pidarg, Boolean interruptible) {
+extern int ewait(int pidarg, int opts) {
 	int deadpid, status;
-	Proc *proc;
-	while ((deadpid = dowait(pidarg, &status)) == -1) {
+	while ((deadpid = dowait(pidarg, &status)) == -1 && errno == EINTR)
+		if (opts & EWINTERRUPTIBLE)
+			SIGCHK();
+	if (deadpid == -1) {
 		if (errno == ECHILD && pidarg > 0)
 			fail("es:ewait", "wait: %d is not a child of this shell", pidarg);
-		else if (errno != EINTR)
+		else
 			fail("es:ewait", "wait: %s", esstrerror(errno));
-		if (interruptible)
-			SIGCHK();
 	}
-	proc = reap(deadpid);
+	reap(deadpid);
 #if JOB_PROTECT
 	tctakepgrp();
 #endif
-	if (proc->background)
-		printstatus(proc->pid, status);
-	efree(proc);
+	if (opts & EWPRINTSTATUS)
+		printstatus(deadpid, status);
 	return status;
 }
 
@@ -177,11 +176,10 @@ extern int ewait(int pidarg, Boolean interruptible) {
 PRIM(apids) {
 	Proc *p;
 	Ref(List *, lp, NULL);
-	for (p = proclist; p != NULL; p = p->next)
-		if (p->background) {
-			Term *t = mkstr(str("%d", p->pid));
-			lp = mklist(t, lp);
-		}
+	for (p = proclist; p != NULL; p = p->next) {
+		Term *t = mkstr(str("%d", p->pid));
+		lp = mklist(t, lp);
+	}
 	/* TODO: sort the return value, but by number? */
 	RefReturn(lp);
 }
@@ -200,7 +198,7 @@ PRIM(wait) {
 		fail("$&wait", "usage: wait [pid]");
 		NOTREACHED;
 	}
-	return mklist(mkstr(mkstatus(ewait(pid, TRUE))), NULL);
+	return mklist(mkstr(mkstatus(ewait(pid, EWINTERRUPTIBLE|EWPRINTSTATUS))), NULL);
 }
 
 extern Dict *initprims_proc(Dict *primdict) {

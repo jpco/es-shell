@@ -36,7 +36,7 @@ PRIM(newpgrp) {
 }
 
 PRIM(background) {
-	int pid = efork(TRUE, TRUE);
+	int pid = efork(TRUE);
 	if (pid == 0) {
 #if JOB_PROTECT
 		/* job control safe version: put it in a new pgroup, if interactive. */
@@ -51,7 +51,7 @@ PRIM(background) {
 
 PRIM(fork) {
 	int pid, status;
-	pid = efork(TRUE, FALSE);
+	pid = efork(TRUE);
 	if (pid == 0)
 		esexit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));
 	status = ewaitfor(pid);
@@ -314,7 +314,7 @@ PRIM(time) {
 	getrusage(RUSAGE_CHILDREN, &ru_prev);
 	gc();	/* do a garbage collection first to ensure reproducible results */
 	t0 = time(NULL);
-	pid = efork(TRUE, FALSE);
+	pid = efork(TRUE);
 	if (pid == 0)
 		esexit(exitstatus(eval(lp, NULL, evalflags | eval_inchild)));
 	status = ewait(pid, FALSE);
