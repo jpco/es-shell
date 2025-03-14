@@ -36,13 +36,18 @@ static Proc *mkproc(int pid) {
 	return proc;
 }
 
-static int setchildpgrp(int pid) {
+static int setchildpgrp(int pid, Boolean inchild) {
 	if (forkpgid == NULL)
 		return 0;
 	if (*forkpgid == 0)
 		*forkpgid = (pid != 0 ? pid : getpid());
-	if (setpgid(pid, *forkpgid) < 0)
-		fail("es:efork", "setpgid: %s", esstrerror(errno));
+	if (setpgid(pid, *forkpgid) < 0) {
+		if (inchild) {
+			eprint("setpgid(%d, %d): %s\n", pid, *forkpgid, esstrerror(errno));
+			esexit(2);
+		} else
+			fail("es:efork", "setpgid(%d, %d): %s", pid, *forkpgid, esstrerror(errno));
+	}
 	return *forkpgid;
 }
 
@@ -54,10 +59,10 @@ extern int efork(Boolean parent) {
 		switch (pid) {
 		default: {	/* parent */
 			Proc *proc = mkproc(pid);
-			proc->pgid = setchildpgrp(pid);
 			if (proclist != NULL)
 				proclist->prev = proc;
 			proclist = proc;
+			proc->pgid = setchildpgrp(pid, FALSE);
 			return pid;
 		}
 		case 0:		/* child */
@@ -66,7 +71,7 @@ extern int efork(Boolean parent) {
 				proclist = proclist->next;
 				efree(p);
 			}
-			if (setchildpgrp(0))
+			if (setchildpgrp(0, TRUE))
 				childpgrp = TRUE;
 			forkpgid = NULL;
 			hasforked = TRUE;
@@ -168,6 +173,12 @@ static List *reap(int *pid, int status) {
 	for (proc = proclist; proc != NULL; proc = proc->next)
 		if (proc->pid == *pid)
 			break;
+	if (proc == NULL) {
+		eprint("reaping %d\nhave procs:", *pid);
+		for (proc = proclist; proc != NULL; proc = proc->next)
+			eprint(" %d (%d)", proc->pid, proc->pgid);
+		eprint("\n");
+	}
 	assert(proc != NULL);
 
 	deadpid = proc->pid;
@@ -218,6 +229,10 @@ static List *reap(int *pid, int status) {
 		if (freeit != NULL)
 			efree(freeit);
 	}
+
+	if (deadpgid > 0 && forkpgid != NULL && deadpgid == *forkpgid)
+		*forkpgid = 0;
+
 	*pid = (length(statuslist) > 1 ? -deadpgid : deadpid);
 	RefReturn(statuslist);
 }

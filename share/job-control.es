@@ -47,7 +47,7 @@
 
 let (r = $fn-%run)
 fn %run {
-	if %is-interactive {
+	if {%is-interactive && !~ $nopgid 1} {
 		newpgrp $r $*
 	} {
 		$r $*
@@ -56,7 +56,7 @@ fn %run {
 
 let (p = $fn-%pipe)
 fn %pipe {
-	if %is-interactive {
+	if {%is-interactive && !~ $nopgid 1} {
 		newpgrp $p $*
 	} {
 		$p $*
@@ -65,11 +65,39 @@ fn %pipe {
 
 let (b = $fn-%background)
 fn %background {
-	if %is-interactive {
+	if {%is-interactive && !~ $nopgid 1} {
 		newpgrp $b $*
 	} {
 		$b $*
 	}
+}
+
+let (b = $fn-%backquote)
+fn %backquote {
+	local (nopgid = 1) $b $*
+}
+
+# FIXME: %readfrom and %writeto should really call their bodies in a newpgrp,
+# but it's buggy right now -- see
+#
+#   cat <{sleep 2; echo <=%read}
+#
+# OTOH, bash doesn't work right on this either:
+#
+#   cat <(/usr/bin/sleep 2; read -r line; echo $line)
+#
+# gives an "Input/output error" on the read, so :shrug:
+
+let (r = $fn-%readfrom)
+fn %readfrom {
+	# newpgrp $r $*
+	local (nopgid = 1) $r $*
+}
+
+let (w = $fn-%writeto)
+fn %writeto {
+	# newpgrp $w $*
+	local (nopgid = 1) $w $*
 }
 
 # Since job control makes it generally more critical to know about child

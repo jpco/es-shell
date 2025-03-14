@@ -184,6 +184,8 @@ PRIM(here) {
 		ewrite(p[1], doc, doclen);
 	} else
 #endif
+	/* FIXME: handle putting this in the same (potential) pgroup as the
+	 * evaluated command */
 	if ((pid = pipefork(p, NULL)) == 0) {	/* child that writes to pipe */
 		close(p[0]);
 		ewrite(p[1], doc, doclen);
@@ -286,6 +288,8 @@ PRIM(readfrom) {
 	lp = lp->next;
 	Ref(Term *, cmd, lp->term);
 
+	/* FIXME: if we're in a newpgrp context, only wait once and throw away
+	 * the input process's return value */
 	if ((pid = pipefork(p, NULL)) == 0) {
 		close(p[0]);
 		mvfd(p[1], 1);
@@ -325,6 +329,8 @@ PRIM(writeto) {
 	lp = lp->next;
 	Ref(Term *, cmd, lp->term);
 
+	/* FIXME: if we're in a newpgrp context, only wait once and throw away
+	 * the output process's return value */
 	if ((pid = pipefork(p, NULL)) == 0) {
 		close(p[1]);
 		mvfd(p[0], 0);
