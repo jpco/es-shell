@@ -276,6 +276,7 @@ PRIM(pipe) {
 #if HAVE_DEV_FD
 PRIM(readfrom) {
 	int pid, p[2];
+	Boolean fnp = forcenopgrp;
 	Push push;
 
 	caller = "$&readfrom";
@@ -288,13 +289,13 @@ PRIM(readfrom) {
 	lp = lp->next;
 	Ref(Term *, cmd, lp->term);
 
-	/* FIXME: if we're in a newpgrp context, only wait once and throw away
-	 * the input process's return value */
+	forcenopgrp = TRUE;
 	if ((pid = pipefork(p, NULL)) == 0) {
 		close(p[0]);
 		mvfd(p[1], 1);
 		esexit(exitstatus(eval1(input, evalflags &~ eval_inchild)));
 	}
+	forcenopgrp = fnp;
 
 	close(p[1]);
 	lp = mklist(mkstr(str(DEVFD_PATH, p[0])), NULL);
@@ -317,6 +318,7 @@ PRIM(readfrom) {
 
 PRIM(writeto) {
 	int pid, p[2];
+	Boolean fnp = forcenopgrp;
 	Push push;
 
 	caller = "$&writeto";
@@ -329,13 +331,13 @@ PRIM(writeto) {
 	lp = lp->next;
 	Ref(Term *, cmd, lp->term);
 
-	/* FIXME: if we're in a newpgrp context, only wait once and throw away
-	 * the output process's return value */
+	forcenopgrp = TRUE;
 	if ((pid = pipefork(p, NULL)) == 0) {
 		close(p[1]);
 		mvfd(p[0], 0);
 		esexit(exitstatus(eval1(output, evalflags &~ eval_inchild)));
 	}
+	forcenopgrp = fnp;
 
 	close(p[0]);
 	lp = mklist(mkstr(str(DEVFD_PATH, p[1])), NULL);
@@ -379,6 +381,7 @@ restart:
 
 PRIM(backquote) {
 	int pid, p[2];
+	Boolean fnp = forcenopgrp;
 	List *status;
 
 	caller = "$&backquote";
@@ -389,11 +392,13 @@ PRIM(backquote) {
 	Ref(char *, sep, getstr(lp->term));
 	lp = lp->next;
 
+	forcenopgrp = TRUE;
 	if ((pid = pipefork(p, NULL)) == 0) {
 		mvfd(p[1], 1);
 		close(p[0]);
 		esexit(exitstatus(eval(lp, NULL, evalflags | eval_inchild)));
 	}
+	forcenopgrp = fnp;
 
 	close(p[1]);
 	lp = bqinput(sep, p[0]);

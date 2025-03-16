@@ -64,3 +64,7 @@ test 'setpgid' {
 		assert {!{ps -o pid | grep $pid}}
 	}
 }
+
+# TODO: job control related tests
+#  - make sure `{} and <{} and >{} run in local pgrp
+#  - make sure newpgrp {a; b} doesn't break

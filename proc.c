@@ -7,6 +7,7 @@
 #define	EWCONTINUE	4
 
 Boolean hasforked = FALSE;
+Boolean forcenopgrp = FALSE;
 int *forkpgid = NULL;
 
 typedef enum { LIVE, STOPPED, DEAD } procstate;
@@ -62,7 +63,8 @@ extern int efork(Boolean parent) {
 			if (proclist != NULL)
 				proclist->prev = proc;
 			proclist = proc;
-			proc->pgid = setchildpgrp(pid, FALSE);
+			if (!forcenopgrp)
+				proc->pgid = setchildpgrp(pid, FALSE);
 			return pid;
 		}
 		case 0:		/* child */
@@ -71,7 +73,7 @@ extern int efork(Boolean parent) {
 				proclist = proclist->next;
 				efree(p);
 			}
-			if (setchildpgrp(0, TRUE))
+			if (!forcenopgrp && setchildpgrp(0, TRUE))
 				childpgrp = TRUE;
 			forkpgid = NULL;
 			hasforked = TRUE;

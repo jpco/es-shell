@@ -1,100 +1,92 @@
 # job-control.es -- Job control for the extensible shell.
 #
-# NOTE: THIS IS AN INCOMPLETE EXPERIMENTAL SCRIPT WHICH SHOULD NOT BE USED IN
-# REAL LIFE!  It is not well tested, and requires external setup to work!
+# NOTE: THIS IS AN EXPERIMENTAL SCRIPT!  CAVEAT USER!
 #
 # This script combines existing mechanisms in es to create a form of job
 # control.  It supports ^Z-ing running commands, fg'ing or bg'ing stopped
 # commands, and listing stopped jobs (and processes) with the apids function.
 #
-# There are a few "sugar" features which are not implemented here.  Es does not
-# give jobs cute names, for example, instead only using process group IDs
-# (as negative numbers, to indicate that they are pgids, such as with the
-# waitpid() and kill() functions); in addition, es does not perform the "You
-# have stopped jobs." check on exit.  Both of these things can be added, but
-# this is a minimal implementation.
+# There are a few standard job control "sugar" features which are not
+# implemented here.  Es does not give jobs cute names, for example, instead only
+# using process group IDs (as negative numbers, to indicate that they are pgids,
+# like what's used by the waitpid(3) and kill(3) functions); in addition, es
+# does not perform the "You have stopped jobs." check on exit.  Both of these
+# things can be added without too much difficulty by the motivated user.
 #
 # Slightly harder to add would be printing job commands when a job is managed.
 # This could be added without too much trouble, but making it "pretty" may
 # require something like https://github.com/wryun/es-shell/pull/65.  I haven't
-# explored this closely; I don't really care about all that.
+# explored this closely.
 #
-# Everything here SHOULD happen without crashing or otherwise messing with the
-# shell.
+# Ideally none of this should create new buggy/crashing cases for the shell.
+# Unfortunately it's relatively easy to shoot yourself in the foot with job
+# control, so that's somewhat difficult to guarantee.
 
-# TODO: test test test, including with scripts! scripts should behave without
-# job control!
+# The following hooks %interactive-loop to block the job control signals and
+# put the shell into its own process group.  This is the standard start-up
+# procedure for a job control shell.  If successful, then it defines the
+# %make-job function.
+#
+# The subtle implication here is that a script invoked in a new shell process
+# (like `./script.es`) will not be using job control, but a script sourced
+# (like `. script.es`) from an %interactive-loop will.  This matches bash, zsh,
+# and tcsh, but differs from ksh.  What do you know!
 
-# TODO: figure out how to inject these into %interactive-loop startup
-# signals = $signals +sigtstp +sigttin +sigttou
-# newpgrp
+let (loop = $fn-%interactive-loop)
+fn %interactive-loop {
+	# Compat: gracefully handle es binaries which can't do job control
+	catch @ {
+		return <={$loop $*}
+	} {
+		signals = $signals +sigtstp +sigttin +sigttou
+	}
+	local (
+		fn-%make-job = newpgrp
+		noexport = $noexport fn-%make-job
+	) {
+		newpgrp
+		$loop $*
+	}
+}
 
 # newpgrp has been extended such that when called with no arguments, it puts
-# the shell itself into a new process group (and takes the terminal), but if
-# given arguments, it runs that command such that any forked processes are
-# placed into a new process group of its own.  Once child processes are in a
-# pgroup, the shell manages them as a single unit.  This is the core OS-level
-# concept backing a "job" in a job control shell.
+# the shell itself into a new process group (and takes the terminal) just as
+# before, but if given arguments, it runs that command such that any forked
+# processes are placed into a new process group of its own.  Once child
+# processes are in a pgroup, the shell manages them as a single unit.  This is
+# the core OS-level concept backing a "job" in a job control shell.
+#
+# Note that this setup will quickly lead to nested `newpgrp' calls when invoking
+# an external binary in a pipe, or in the background, or whatever.  In these
+# cases the internal `newpgrp' commands are no-ops; they simply run their
+# arguments.  That is, the outer newpgrp "wins".
 #
 # These spoofs hook process group (that is, job) creation into invoking a
 # binary, pipe, or backgrounded process.  Other process-creating primitives
-# (like $&backquote and other I/O functions) are not hooked, as they should be
-# managed with the shell.
-#
-# Note that this will quickly lead to nested `newpgrp' calls when invoking an
-# external binary in a pipe, or in the background, or whatever.  In these cases
-# the internal `newpgrp' commands are no-ops; they simply run their arguments.
+# (like $&backquote and other I/O functions) are not hooked, as processes
+# created in those contexts should be managed with the shell.  In fact, the
+# $&backquote, $&readfrom, and $&writeto primitives prevent their forked
+# input/output processes from being placed in a child pgroup.
 
 let (r = $fn-%run)
 fn %run {
-	if {%is-interactive && !~ $nopgid 1} {
-		newpgrp $r $*
-	} {
-		$r $*
-	}
+	$fn-%make-job $r $*
 }
 
 let (p = $fn-%pipe)
 fn %pipe {
-	if {%is-interactive && !~ $nopgid 1} {
-		newpgrp $p $*
-	} {
-		$p $*
-	}
+	$fn-%make-job $p $*
 }
 
 let (b = $fn-%background)
 fn %background {
-	if {%is-interactive && !~ $nopgid 1} {
-		newpgrp $b $*
-	} {
-		$b $*
-	}
+	$fn-%make-job $b $*
 }
 
-# These hooks set $nopgid to avoid any job controlling.  Is this hacky?
-# Should it be built-in?  Maybe this way is required for the user-written
-# %readfrom and %writeto?
-
-let (b = $fn-%backquote)
-fn %backquote {
-	local (nopgid = 1) $b $*
-}
-
-let (r = $fn-%readfrom)
-fn %readfrom f in cmd {
-	$r $f {local (nopgid = 1) $in} $cmd
-}
-
-let (w = $fn-%writeto)
-fn %writeto f out cmd {
-	$w $f {local (nopgid = 1) $out} $cmd
-}
-
-# Since job control makes it generally more critical to know about child
-# processes and pgroups, %apids and apids are convenience wrappers around the
-# $&apids primitive.  %apids will return processes not wrapped in a pgroup
-# as their pids, and any pgroups will be returned as a single -pgid.
+# Since job control makes it generally more useful to know about child processes
+# and pgroups, %apids and apids are convenience wrappers around the $&apids
+# primitive.  %apids will return processes not wrapped in a pgroup as their pids,
+# and any pgroups will be returned as a single -pgid.
 #
 # If %apids is given any pids or -pgids as arguments, it will search for any
 # running pids associated with those arguments and return them.  This allows
@@ -123,7 +115,7 @@ fn apids {
 }
 
 # This extension to %echo-status sets the apid variable and prints something
-# appropriate for stopped processes.  $apid is used wiht job control to make
+# appropriate for stopped processes.  $apid is used with job control to make
 # `fg' and `bg' more convenient, not requiring a user to pick out the relevant
 # -pgid for the stopped job every time.
 
