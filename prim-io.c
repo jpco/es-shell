@@ -184,12 +184,15 @@ PRIM(here) {
 		ewrite(p[1], doc, doclen);
 	} else
 #endif
-	/* FIXME: handle putting this in the same (potential) pgroup as the
-	 * evaluated command */
-	if ((pid = pipefork(p, NULL)) == 0) {	/* child that writes to pipe */
-		close(p[0]);
-		ewrite(p[1], doc, doclen);
-		esexit(0);
+	{
+		Boolean fnp = forcenopgrp;
+		forcenopgrp = TRUE;
+		if ((pid = pipefork(p, NULL)) == 0) {	/* child that writes to pipe */
+			close(p[0]);
+			ewrite(p[1], doc, doclen);
+			esexit(0);
+		}
+		forcenopgrp = fnp;
 	}
 
 	close(p[1]);
