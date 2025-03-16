@@ -1,12 +1,12 @@
 # job-control.es -- Job control for the extensible shell.
-# 
+#
 # NOTE: THIS IS AN INCOMPLETE EXPERIMENTAL SCRIPT WHICH SHOULD NOT BE USED IN
 # REAL LIFE!  It is not well tested, and requires external setup to work!
-# 
+#
 # This script combines existing mechanisms in es to create a form of job
 # control.  It supports ^Z-ing running commands, fg'ing or bg'ing stopped
 # commands, and listing stopped jobs (and processes) with the apids function.
-# 
+#
 # There are a few "sugar" features which are not implemented here.  Es does not
 # give jobs cute names, for example, instead only using process group IDs
 # (as negative numbers, to indicate that they are pgids, such as with the
@@ -18,7 +18,7 @@
 # This could be added without too much trouble, but making it "pretty" may
 # require something like https://github.com/wryun/es-shell/pull/65.  I haven't
 # explored this closely; I don't really care about all that.
-# 
+#
 # Everything here SHOULD happen without crashing or otherwise messing with the
 # shell.
 
@@ -72,32 +72,23 @@ fn %background {
 	}
 }
 
+# These hooks set $nopgid to avoid any job controlling.  Is this hacky?
+# Should it be built-in?  Maybe this way is required for the user-written
+# %readfrom and %writeto?
+
 let (b = $fn-%backquote)
 fn %backquote {
 	local (nopgid = 1) $b $*
 }
 
-# FIXME: %readfrom and %writeto should really call their bodies in a newpgrp,
-# but it's buggy right now -- see
-#
-#   cat <{sleep 2; echo <=%read}
-#
-# OTOH, bash doesn't work right on this either:
-#
-#   cat <(/usr/bin/sleep 2; read -r line; echo $line)
-#
-# gives an "Input/output error" on the read, so :shrug:
-
 let (r = $fn-%readfrom)
-fn %readfrom {
-	# newpgrp $r $*
-	local (nopgid = 1) $r $*
+fn %readfrom f in cmd {
+	$r $f {local (nopgid = 1) $in} $cmd
 }
 
 let (w = $fn-%writeto)
-fn %writeto {
-	# newpgrp $w $*
-	local (nopgid = 1) $w $*
+fn %writeto f out cmd {
+	$w $f {local (nopgid = 1) $out} $cmd
 }
 
 # Since job control makes it generally more critical to know about child
@@ -204,9 +195,18 @@ fn bg pid {
 # entails.
 
 fn check-wait {
-	local (fn %echo-status pid did status {
-		echo >[1=2] $pid $did^: $status
-	}) $&wait -n
+	catch @ e type msg {
+		# this isn't REALLY required long-term but it's nicer than an
+		# infinite error loop for shells that can't handle wait -n
+		if {~ $e error && ~ $type '$&wait' && ~ $msg 'wait: 0: bad pid'} {
+			echo >[1=2] this es can''''t do job control!
+			fn-check-wait = {}
+		}
+	} {
+		local (fn %echo-status pid did status {
+			echo >[1=2] $pid $did^: $status
+		}) $&wait -n
+	}
 }
 
 # This hooks the check-wait function into %prompt, for behavior somewhat like
