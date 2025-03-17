@@ -185,14 +185,14 @@ PRIM(here) {
 	} else
 #endif
 	{
-		Boolean fnp = forcenopgrp;
-		forcenopgrp = TRUE;
+		int *fp = forkpgid;
+		forkpgid = NULL;
 		if ((pid = pipefork(p, NULL)) == 0) {	/* child that writes to pipe */
 			close(p[0]);
 			ewrite(p[1], doc, doclen);
 			esexit(0);
 		}
-		forcenopgrp = fnp;
+		forkpgid = fp;
 	}
 
 	close(p[1]);
@@ -279,7 +279,6 @@ PRIM(pipe) {
 #if HAVE_DEV_FD
 PRIM(readfrom) {
 	int pid, p[2];
-	Boolean fnp = forcenopgrp;
 	Push push;
 
 	caller = "$&readfrom";
@@ -292,13 +291,11 @@ PRIM(readfrom) {
 	lp = lp->next;
 	Ref(Term *, cmd, lp->term);
 
-	forcenopgrp = TRUE;
 	if ((pid = pipefork(p, NULL)) == 0) {
 		close(p[0]);
 		mvfd(p[1], 1);
 		esexit(exitstatus(eval1(input, evalflags &~ eval_inchild)));
 	}
-	forcenopgrp = fnp;
 
 	close(p[1]);
 	lp = mklist(mkstr(str(DEVFD_PATH, p[0])), NULL);
@@ -308,12 +305,14 @@ PRIM(readfrom) {
 		lp = eval1(cmd, evalflags);
 	CatchException (e)
 		close(p[0]);
-		ewaitfor(pid);
+		if (ischild(pid))
+			ewaitfor(pid);
 		throw(e);
 	EndExceptionHandler
 
 	close(p[0]);
-	ewaitfor(pid);
+	if (ischild(pid))
+		ewaitfor(pid);
 	varpop(&push);
 	RefEnd3(cmd, input, var);
 	RefReturn(lp);
@@ -321,7 +320,6 @@ PRIM(readfrom) {
 
 PRIM(writeto) {
 	int pid, p[2];
-	Boolean fnp = forcenopgrp;
 	Push push;
 
 	caller = "$&writeto";
@@ -334,13 +332,11 @@ PRIM(writeto) {
 	lp = lp->next;
 	Ref(Term *, cmd, lp->term);
 
-	forcenopgrp = TRUE;
 	if ((pid = pipefork(p, NULL)) == 0) {
 		close(p[1]);
 		mvfd(p[0], 0);
 		esexit(exitstatus(eval1(output, evalflags &~ eval_inchild)));
 	}
-	forcenopgrp = fnp;
 
 	close(p[0]);
 	lp = mklist(mkstr(str(DEVFD_PATH, p[1])), NULL);
@@ -350,12 +346,14 @@ PRIM(writeto) {
 		lp = eval1(cmd, evalflags);
 	CatchException (e)
 		close(p[1]);
-		ewaitfor(pid);
+		if (ischild(pid))
+			ewaitfor(pid);
 		throw(e);
 	EndExceptionHandler
 
 	close(p[1]);
-	ewaitfor(pid);
+	if (ischild(pid))
+		ewaitfor(pid);
 	varpop(&push);
 	RefEnd3(cmd, output, var);
 	RefReturn(lp);
@@ -383,9 +381,8 @@ restart:
 }
 
 PRIM(backquote) {
-	int pid, p[2];
-	Boolean fnp = forcenopgrp;
-	List *status;
+	int pid, p[2], *fp;
+	List *status = NULL;
 
 	caller = "$&backquote";
 	if (list == NULL)
@@ -395,13 +392,14 @@ PRIM(backquote) {
 	Ref(char *, sep, getstr(lp->term));
 	lp = lp->next;
 
-	forcenopgrp = TRUE;
+	fp = forkpgid;
+	forkpgid = NULL;
 	if ((pid = pipefork(p, NULL)) == 0) {
 		mvfd(p[1], 1);
 		close(p[0]);
 		esexit(exitstatus(eval(lp, NULL, evalflags | eval_inchild)));
 	}
-	forcenopgrp = fnp;
+	forkpgid = fp;
 
 	close(p[1]);
 	lp = bqinput(sep, p[0]);

@@ -7,7 +7,6 @@
 #define	EWCONTINUE	4
 
 Boolean hasforked = FALSE;
-Boolean forcenopgrp = FALSE;
 int *forkpgid = NULL;
 
 typedef enum { LIVE, STOPPED, DEAD } procstate;
@@ -63,8 +62,7 @@ extern int efork(Boolean parent) {
 			if (proclist != NULL)
 				proclist->prev = proc;
 			proclist = proc;
-			if (!forcenopgrp)
-				proc->pgid = setchildpgrp(pid, FALSE);
+			proc->pgid = setchildpgrp(pid, FALSE);
 			return pid;
 		}
 		case 0:		/* child */
@@ -73,7 +71,7 @@ extern int efork(Boolean parent) {
 				proclist = proclist->next;
 				efree(p);
 			}
-			if (!forcenopgrp && setchildpgrp(0, TRUE))
+			if (setchildpgrp(0, TRUE))
 				childpgrp = TRUE;
 			forkpgid = NULL;
 			hasforked = TRUE;
@@ -144,6 +142,17 @@ extern Noreturn esexit(int code) {
 	exit(code);
 }
 #endif
+
+extern Boolean ischild(int pid) {
+	Proc *p;
+	for (p = proclist; p != NULL; p = p->next) {
+		if (pid > 0 && pid == p->pid)
+			return TRUE;
+		if (pid < 0 && pid == p->pgid)
+			return TRUE;
+	}
+	return FALSE;
+}
 
 /* dowait -- a waitpid wrapper that interfaces with signals */
 static int dowait(int pid, int opts, int *statusp) {

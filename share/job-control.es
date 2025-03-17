@@ -63,10 +63,8 @@ fn %interactive-loop {
 #
 # These spoofs hook process group (that is, job) creation into invoking a
 # binary, pipe, or backgrounded process.  Other process-creating primitives
-# (like $&backquote and other I/O functions) are not hooked, as processes
-# created in those contexts should be managed with the shell.  In fact, the
-# $&backquote, $&readfrom, and $&writeto primitives prevent their forked
-# input/output processes from being placed in a child pgroup.
+# (like $&backquote and other I/O functions) are not hooked like this, as
+# processes created in those contexts should be managed with the shell.
 
 let (r = $fn-%run)
 fn %run {
@@ -82,6 +80,27 @@ let (b = $fn-%background)
 fn %background {
 	$fn-%make-job $b $*
 }
+
+
+# The following hooks prevent pgroup creation in certain contexts.  es's
+# behavior is just less surprising with these spoofs.
+
+let (b = $fn-%backquote)
+fn %backquote {
+	local (fn-%make-job = ()) $b $*
+}
+
+let (r = $fn-%readfrom)
+fn %readfrom f in cmd {
+	$r $f {local (fn-%make-job = ()) $in} $cmd
+}
+
+let (w = $fn-%writeto)
+fn %writeto f in cmd {
+	$r $f {local (fn-%make-job = ()) $in} $cmd
+}
+
+
 
 # Since job control makes it generally more useful to know about child processes
 # and pgroups, %apids and apids are convenience wrappers around the $&apids

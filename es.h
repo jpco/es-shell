@@ -221,9 +221,9 @@ extern char *checkexecutable(char *file);
 /* proc.c */
 
 extern Boolean hasforked;
-extern Boolean forcenopgrp;
 extern int *forkpgid;
 extern int efork(Boolean parent);
+extern Boolean ischild(int pid);
 extern pid_t spgrp(pid_t pgid);
 extern int tctakepgrp(void);
 extern void initpgrp(void);
