@@ -184,21 +184,11 @@ static List *reap(int *pid, int status) {
 	for (proc = proclist; proc != NULL; proc = proc->next)
 		if (proc->pid == *pid)
 			break;
-	if (proc == NULL) {
-		eprint("reaping %d\nhave procs:", *pid);
-		for (proc = proclist; proc != NULL; proc = proc->next)
-			eprint(" %d (%d)", proc->pid, proc->pgid);
-		eprint("\n");
-	}
 	assert(proc != NULL);
 
 	deadpid = proc->pid;
 	deadpgid = proc->pgid;
 
-	/* if (WIFCONTINUED(status)) {
-		proc->state = LIVE;
-		return NULL;
-	} */
 	if (WIFSTOPPED(status))
 		proc->state = STOPPED;
 	else
@@ -261,8 +251,6 @@ static int pidtopgid(int pid) {
 	return pid;
 }
 
-/* TODO: returning a gcalloc'd List * here is the source of a lot of issues.
- * change to a list of Proc *s or a custom ealloc'd status struct! */
 extern List *ewait(int pa, int opts) {
 	int status, deadpid;
 	volatile Boolean nostatus = FALSE;
@@ -279,7 +267,6 @@ extern List *ewait(int pa, int opts) {
 				fail("es:ewait", "wait -c requires a pid or pgid argument");
 			else if (kill(pidarg, SIGCONT) < 0)
 				fail("es:ewait", "continue: %s", esstrerror(errno));
-			/* TODO: set proc states here to LIVE? don't have WCONTINUED in POSIX.1-2001 */
 		}
 
 		do {
@@ -319,7 +306,6 @@ extern List *ewait(int pa, int opts) {
 		return NULL;
 	}
 	/* has to be down here because we need to have the terminal back before printing anything */
-	/* should this be called even when returning NULL? */
 	printstatus(deadpid, status, statuslist);
 	RefReturn(statuslist);
 }
