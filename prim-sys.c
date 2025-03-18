@@ -114,14 +114,10 @@ static List *forkexec(char *file, List *list, Boolean inchild) {
 		failexec(file, list);
 	}
 	gcenable();
+	termsig_newline = FALSE;
 	status = ewaitfor(pid);
-	/* FIXME: this is ugly and doesn't even work */
-	/* if (!hasprefix(str("%L", status, ""), "sig")) {
-		termsig_newline = FALSE;
-		SIGCHK();
-		termsig_newline = TRUE;
-	} else */
-		SIGCHK();
+	termsig_newline = TRUE;
+	SIGCHK();
 	return status;
 }
 

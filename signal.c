@@ -122,7 +122,7 @@ extern Sigeffect esignal(int sig, Sigeffect effect) {
 			}
 			break;
 		case sig_special:
-			if (sig != SIGINT) {
+			if (sig != SIGINT && sig != SIGQUIT && sig != SIGTSTP) {
 				eprint("$&setsignals: special handler not defined for %s\n", signame(sig));
 				return old;
 			}
