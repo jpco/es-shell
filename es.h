@@ -339,6 +339,7 @@ extern List *esoptend(void);
 
 extern List *prim(char *s, List *list, Binding *binding, int evalflags);
 extern void initprims(void);
+extern void updateprims(Dict *(*func)(Dict *));
 extern List *primswithprefix(char *prefix);
 
 

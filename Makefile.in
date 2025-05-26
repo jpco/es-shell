@@ -48,7 +48,7 @@ MKDIR_P = @MKDIR_P@
 
 
 CFLAGS	= @STRICT_CFLAGS@ -I. -I$(srcdir) -W -Wall @READLINE_CFLAGS@ @CFLAGS@ $(ADDCFLAGS)
-LDFLAGS	= @LDFLAGS@ $(ADDLDFLAGS)
+LDFLAGS	= @LDFLAGS@ $(ADDLDFLAGS) -rdynamic
 LIBS	= @READLINE_LIBS@ @LIBS@ $(ADDLIBS)
 
 HFILES	= config.h es.h gc.h input.h prim.h print.h sigmsgs.h \

@@ -51,3 +51,7 @@ extern void initprims(void) {
 #define	primdict prims
 	X(primitives);
 }
+
+extern void updateprims(Dict *(*func)(Dict *)) {
+	prims = func(prims);
+}

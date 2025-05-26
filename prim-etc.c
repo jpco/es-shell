@@ -302,6 +302,35 @@ PRIM(setmaxevaldepth) {
 	RefReturn(lp);
 }
 
+#include <dlfcn.h>
+
+PRIM(loadprims) {
+	void *handle;
+	Dict *(*func)(Dict *);
+	if (length(list) != 1)
+		fail("$&loadprims", "usage: $&loadprims library");
+	handle = dlopen(getstr(list->term), RTLD_LAZY|RTLD_GLOBAL);
+	if (handle == NULL) {
+		char *err = dlerror();
+		if (err != NULL)
+			fail("$&loadprims", "dlopen(): %s", err);
+		else
+			fail("$&loadprims", "error during dlopen()");
+	}
+	/* funky cast sidesteps ISO C problems with casting void * to a function
+	 * pointer */
+	*(void **) &func = dlsym(handle, "init");
+	if (func == NULL) {
+		char *err = dlerror();
+		if (err != NULL)
+			fail("$&loadprims", "dlsym(): %s", err);
+		else
+			fail("$&loadprims", "error during dlsym()");
+	}
+	updateprims(func);
+	return ltrue;
+}
+
 #if HAVE_READLINE
 PRIM(sethistory) {
 	if (list == NULL) {
@@ -371,6 +400,7 @@ extern Dict *initprims_etc(Dict *primdict) {
 	X(exitonfalse);
 	X(noreturn);
 	X(setmaxevaldepth);
+	X(loadprims);
 #if HAVE_READLINE
 	X(sethistory);
 	X(writehistory);
