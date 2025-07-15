@@ -1,14 +1,10 @@
 /* status.c -- status manipulations ($Revision: 1.1.1.1 $) */
 
 #include "es.h"
-#include "term.h"
 
-static const Term
-	trueterm	= { "0", NULL },
-	falseterm	= { "1", NULL };
 static const List
-	truelist	= { (Term *) &trueterm, NULL },
-	falselist	= { (Term *) &falseterm, NULL };
+	truelist	= { "0", NULL, NULL },
+	falselist	= { "1", NULL, NULL };
 List
 	*ltrue		= (List *) &truelist,
 	*lfalse		= (List *) &falselist;
@@ -16,11 +12,10 @@ List
 /* istrue -- is this status list true? */
 extern Boolean istrue(List *status) {
 	for (; status != NULL; status = status->next) {
-		Term *term = status->term;
-		if (term->closure != NULL)
+		if (isclosure(status))
 			return FALSE;
 		else {
-			const char *str = term->str;
+			const char *str = status->str;
 			assert(str != NULL);
 			if (*str != '\0' && (*str != '0' || str[1] != '\0'))
 				return FALSE;
@@ -31,7 +26,6 @@ extern Boolean istrue(List *status) {
 
 /* exitstatus -- turn a status list into an exit(2) value */
 extern int exitstatus(List *status) {
-	Term *term;
 	char *s;
 	unsigned long n;
 
@@ -39,11 +33,10 @@ extern int exitstatus(List *status) {
 		return 0;
 	if (status->next != NULL)
 		return istrue(status) ? 0 : 1;
-	term = status->term;
-	if (term->closure != NULL)
+	if (isclosure(status))
 		return 1;
 
-	s = term->str;
+	s = status->str;
 	if (*s == '\0')
 		return 0;
 	n = strtol(s, &s, 0);

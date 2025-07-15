@@ -123,7 +123,7 @@ extern Boolean listmatch(List *subject, List *pattern, StrList *quote) {
 		Ref(StrList *, q, quote);
 		for (; p != NULL; p = p->next, q = q->next) {
 			/* one or more stars match null */
-			char *pw = getstr(p->term), *qw;
+			char *pw = getstr(p), *qw;
 			assert(q != NULL);
 			qw = q->str;
 			if (*pw != '\0' && qw != QUOTED) {
@@ -151,13 +151,13 @@ extern Boolean listmatch(List *subject, List *pattern, StrList *quote) {
 
 	for (; p != NULL; p = p->next, q = q->next) {
 		assert(q != NULL);
-		assert(p->term != NULL);
+		assert(p != NULL);
 		assert(q->str != NULL);
-		Ref(char *, pw, getstr(p->term));
+		Ref(char *, pw, getstr(p));
 		Ref(char *, qw, q->str);
 		Ref(List *, t, s);
 		for (; t != NULL; t = t->next) {
-			char *tw = getstr(t->term);
+			char *tw = getstr(t);
 			if (match(tw, pw, qw)) {
 				RefPop3(t, qw, pw);
 				RefPop3(q, p, s);
@@ -193,12 +193,12 @@ static List *extractsinglematch(const char *subject, const char *pattern,
 			    case '*': {
 				const char *begin;
 				if (pattern[i] == '\0')
-					return mklist(mkstr(gcdup(s)), result);
+					return mklist(gcdup(s), NULL, result);
 				for (begin = s;; s++) {
 					const char *q = TAILQUOTE(quoting, i);
 					assert(*s != '\0');
 					if (match(s, pattern + i, q)) {
-						result = mklist(mkstr(gcndup(begin, s - begin)), result);
+						result = mklist(gcndup(begin, s - begin), NULL, result);
 						return haswild(pattern + i, q)
 							? extractsinglematch(s, pattern + i, q, result)
 							: result;
@@ -216,7 +216,7 @@ static List *extractsinglematch(const char *subject, const char *pattern,
 			    }
 			    FALLTHROUGH;
 			    case '?':
-				result = mklist(mkstr(str("%c", *s)), result);
+				result = mklist(str("%c", *s), NULL, result);
 				break;
 			    default:
 				break;
@@ -250,9 +250,9 @@ extern List *extractmatches(List *subjects, List *patterns, StrList *quotes) {
 		     pattern != NULL;
 		     pattern = pattern->next, quote = quote->next) {
 			List *match;
-			char *pat = getstr(pattern->term);
+			char *pat = getstr(pattern);
 			assert(quote != NULL);
-			match = extractsinglematch(getstr(subject->term),
+			match = extractsinglematch(getstr(subject),
 						   pat, quote->str, NULL);
 			if (match != NULL) {
 				/* match is returned backwards, so reverse it */

@@ -46,7 +46,7 @@ PRIM(background) {
 		mvfd(eopen("/dev/null", oOpen), 0);
 		esexit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));
 	}
-	return mklist(mkstr(str("%d", pid)), NULL);
+	return mklist(str("%d", pid), NULL, NULL);
 }
 
 PRIM(fork) {
@@ -57,7 +57,7 @@ PRIM(fork) {
 	status = ewaitfor(pid);
 	SIGCHK();
 	printstatus(0, status);
-	return mklist(mkstr(mkstatus(status)), NULL);
+	return mklist(mkstatus(status), NULL, NULL);
 }
 
 PRIM(run) {
@@ -65,7 +65,7 @@ PRIM(run) {
 	if (list == NULL)
 		fail("$&run", "usage: %%run file argv0 argv1 ...");
 	Ref(List *, lp, list);
-	file = getstr(lp->term);
+	file = getstr(lp);
 	lp = forkexec(file, lp->next, (evalflags & eval_inchild) != 0);
 	RefReturn(lp);
 }
@@ -80,7 +80,7 @@ PRIM(umask) {
 	if (list->next == NULL) {
 		int mask;
 		char *s, *t;
-		s = getstr(list->term);
+		s = getstr(list);
 		mask = strtol(s, &t, 8);
 		if ((t != NULL && *t != '\0') || ((unsigned) mask) > 07777)
 			fail("$&umask", "bad umask: %s", s);
@@ -95,7 +95,7 @@ PRIM(cd) {
 	char *dir;
 	if (list == NULL || list->next != NULL)
 		fail("$&cd", "usage: $&cd directory");
-	dir = getstr(list->term);
+	dir = getstr(list);
 	if (chdir(dir) == -1)
 		fail("$&cd", "chdir %s: %s", dir, esstrerror(errno));
 	return ltrue;
@@ -109,7 +109,7 @@ PRIM(setsignals) {
 	Ref(List *, lp, list);
 	for (; lp != NULL; lp = lp->next) {
 		int sig;
-		const char *s = getstr(lp->term);
+		const char *s = getstr(lp);
 		Sigeffect effect = sig_catch;
 		switch (*s) {
 		case '-':	effect = sig_ignore;	s++; break;
@@ -250,7 +250,7 @@ PRIM(limit) {
 	Boolean hard = FALSE;
 	Ref(List *, lp, list);
 
-	if (lp != NULL && streq(getstr(lp->term), "-h")) {
+	if (lp != NULL && streq(getstr(lp), "-h")) {
 		hard = TRUE;
 		lp = lp->next;
 	}
@@ -259,7 +259,7 @@ PRIM(limit) {
 		for (; lim->name != NULL; lim++)
 			printlimit(lim, hard);
 	else {
-		char *name = getstr(lp->term);
+		char *name = getstr(lp);
 		for (;; lim++) {
 			if (lim->name == NULL)
 				fail("$&limit", "%s: no such limit", name);
@@ -273,8 +273,8 @@ PRIM(limit) {
 			long n;
 			struct rlimit rlim;
 			getrlimit(lim->flag, &rlim);
-			if ((n = parselimit(lim, getstr(lp->term))) < 0)
-				fail("$&limit", "%s: bad limit value", getstr(lp->term));
+			if ((n = parselimit(lim, getstr(lp))) < 0)
+				fail("$&limit", "%s: bad limit value", getstr(lp));
 			if (hard)
 				rlim.rlim_max = (LIMIT_T)n;
 			else
@@ -335,7 +335,7 @@ PRIM(time) {
 	);
 
 	RefEnd(lp);
-	return mklist(mkstr(mkstatus(status)), NULL);
+	return mklist(mkstatus(status), NULL, NULL);
 
 #else	/* !HAVE_GETRUSAGE */
 
@@ -379,7 +379,7 @@ PRIM(time) {
 	printstatus(0, status);
 
 	RefEnd(lp);
-	return mklist(mkstr(mkstatus(status)), NULL);
+	return mklist(mkstatus(status), NULL, NULL);
 
 #endif	/* !HAVE_GETRUSAGE */
 }
@@ -394,7 +394,7 @@ PRIM(execfailure) {
 	if (list == NULL)
 		fail("$&execfailure", "usage: %%exec-failure name argv");
 
-	file = getstr(list->term);
+	file = getstr(list);
 	fd = eopen(file, oOpen);
 	if (fd < 0) {
 		gcenable();
@@ -438,9 +438,9 @@ PRIM(execfailure) {
 	list = list->next;
 	if (list != NULL)
 		list = list->next;
-	list = mklist(mkstr(file), list);
+	list = mklist(file, NULL, list);
 	while (argc != 0)
-		list = mklist(mkstr(args[--argc]), list);
+		list = mklist(args[--argc], NULL, list);
 
 	Ref(List *, lp, list);
 	gcenable();

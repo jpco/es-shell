@@ -16,13 +16,13 @@
  */
 
 typedef struct Tree Tree;
-typedef struct Term Term;
 typedef struct List List;
 typedef struct Binding Binding;
 typedef struct Closure Closure;
 
 struct List {
-	Term *term;
+	char *str;
+	Closure *closure;
 	List *next;
 };
 
@@ -111,27 +111,24 @@ extern int defer_close(Boolean parent, int fd);
 extern void undefer(int ticket);
 
 
-/* term.c */
-
-extern Term *mkterm(char *str, Closure *closure);
-extern Term *mkstr(char *str);
-extern char *getstr(Term *term);
-extern Closure *getclosure(Term *term);
-extern Term *termcat(Term *t1, Term *t2);
-extern Boolean termeq(Term *term, const char *s);
-extern Boolean isclosure(Term *term);
-
 
 /* list.c */
 
-extern List *mklist(Term *term, List *next);
+extern List *mklist(char *str, Closure *closure, List *next);
 extern List *reverse(List *list);
 extern List *append(List *head, List *tail);
 extern List *listcopy(List *list);
 extern int length(List *list);
 extern List *listify(int argc, char **argv);
-extern Term *nth(List *list, int n);
+extern List *nth(List *list, int n);
 extern List *sortlist(List *list);
+
+extern char *getstr(List *term);
+extern Closure *getclosure(List *term);
+extern List *termcat(List *t1, List *t2);
+extern List *termcopy(List *term);
+extern Boolean termeq(List *term, const char *s);
+extern Boolean isclosure(List *term);
 
 
 /* tree.c */
@@ -153,8 +150,8 @@ extern Binding *bindargs(Tree *params, List *args, Binding *binding);
 extern List *forkexec(char *file, List *list, Boolean inchild);
 extern List *walk(Tree *tree, Binding *binding, int flags);
 extern List *eval(List *list, Binding *binding, int flags);
-extern List *eval1(Term *term, int flags);
-extern List *pathsearch(Term *term);
+extern List *eval1(List *term, int flags);
+extern List *pathsearch(List *term);
 
 extern unsigned long evaldepth, maxevaldepth;
 #define	MINmaxevaldepth		100
@@ -331,7 +328,7 @@ extern char *dumphistbuffer(void);
 
 extern void esoptbegin(List *list, const char *caller, const char *usage, Boolean throws);
 extern int esopt(const char *options);
-extern Term *esoptarg(void);
+extern char *esoptarg(void);
 extern List *esoptend(void);
 
 

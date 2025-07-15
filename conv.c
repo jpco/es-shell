@@ -9,12 +9,13 @@ static Boolean Lconv(Format *f) {
 	List *lp, *next;
 	char *sep;
 	const char *fmt = (f->flags & FMT_altform) ? "%S%s" : "%s%s";
+	int i, termlimit = (f->flags & FMT_f1set) ? f->f1 : 0;
 
 	lp = va_arg(f->args, List *);
 	sep = va_arg(f->args, char *);
-	for (; lp != NULL; lp = next) {
+	for (i = 0; lp != NULL && (termlimit <= 0 || i < termlimit); lp = next, i++) {
 		next = lp->next;
-		fmtprint(f, fmt, getstr(lp->term), next == NULL ? "" : sep);
+		fmtprint(f, fmt, getstr(lp), next == NULL ? "" : sep);
 	}
 	return FALSE;
 }
@@ -237,18 +238,6 @@ static Boolean Cconv(Format *f) {
 	return FALSE;
 }
 
-/* %E -- print a term */
-static Boolean Econv(Format *f) {
-	Term *term = va_arg(f->args, Term *);
-	Closure *closure = getclosure(term);
-
-	if (closure != NULL)
-		fmtprint(f, (f->flags & FMT_altform) ? "%#C" : "%C", closure);
-	else
-		fmtprint(f, (f->flags & FMT_altform) ? "%S" : "%s", getstr(term));
-	return FALSE;
-}
-
 /* %S -- print a string with conservative quoting rules */
 static Boolean Sconv(Format *f) {
 	int c;
@@ -366,7 +355,7 @@ static Boolean Wconv(Format *f) {
 	for (lp = va_arg(f->args, List *); lp != NULL; lp = next) {
 		int c;
 		const char *s;
-		for (s = getstr(lp->term); (c = *s) != '\0'; s++) {
+		for (s = getstr(lp); (c = *s) != '\0'; s++) {
 			if (c == ENV_ESCAPE || c == ENV_SEPARATOR)
 				fmtputc(f, ENV_ESCAPE);
 			fmtputc(f, c);
@@ -478,7 +467,6 @@ static Boolean Bconv(Format *f) {
 /* install the conversion routines */
 void initconv(void) {
 	fmtinstall('C', Cconv);
-	fmtinstall('E', Econv);
 	fmtinstall('F', Fconv);
 	fmtinstall('L', Lconv);
 	fmtinstall('N', Nconv);

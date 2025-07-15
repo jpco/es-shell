@@ -779,15 +779,9 @@ static size_t dump(Tag *t, void *p) {
 		return strlen(p) + 1;
 	}
 
-	if (streq(s, "Term")) {
-		Term *t = p;
-		print("str = %ux  closure = %ux\n", t->str, t->closure);
-		return sizeof (Term);
-	}
-
 	if (streq(s, "List")) {
 		List *l = p;
-		print("term = %ux  next = %ux\n", l->term, l->next);
+		print("str = %ux  closure = %ux  next = %ux\n", l->str, l->closure, l->next);
 		return sizeof (List);
 	}
 

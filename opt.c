@@ -4,7 +4,7 @@
 
 static const char *usage, *invoker;
 static List *args;
-static Term *termarg;
+static char *termarg;
 static int nextchar;
 static Boolean throwonerr;
 
@@ -35,8 +35,8 @@ extern int esopt(const char *options) {
 	if (nextchar == 0) {
 		if (args == NULL)
 			return EOF;
-		assert(args->term != NULL);
-		arg = getstr(args->term);
+		assert(args != NULL);
+		arg = getstr(args);
 		if (*arg != '-')
 			return EOF;
 		if (arg[1] == '-' && arg[2] == '\0') {
@@ -45,8 +45,8 @@ extern int esopt(const char *options) {
 		}
 		nextchar = 1;
 	} else {
-		assert(args != NULL && args->term != NULL);
-		arg = getstr(args->term);
+		assert(args != NULL && args != NULL);
+		arg = getstr(args);
 	}
 
 	c = arg[nextchar++];
@@ -76,16 +76,16 @@ extern int esopt(const char *options) {
 			else return ':';
 		}
 		termarg = (nextchar == 0)
-				? args->term
-				: mkstr(gcdup(arg + nextchar));
+				? getstr(args)
+				: gcdup(arg + nextchar);
 		nextchar = 0;
 		args = args->next;
 	}
 	return c;
 }
 
-extern Term *esoptarg(void) {
-	Term *t = termarg;
+extern char *esoptarg(void) {
+	char *t = termarg;
 	assert(t != NULL);
 	termarg = NULL;
 	return t;

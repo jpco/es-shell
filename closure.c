@@ -65,7 +65,8 @@ static Binding *extract(Tree *tree, Binding *bindings) {
 			assert(name->kind == nWord || name->kind == nQword);
 			defn = revtree(defn->u[1].p);
 			for (; defn != NULL; defn = defn->u[1].p) {
-				Term *term;
+				char *str = NULL;
+				Closure *clo = NULL;
 				Tree *word = defn->u[0].p;
 				NodeKind k = word->kind;
 				assert(defn->kind == nList);
@@ -91,14 +92,14 @@ static Binding *extract(Tree *tree, Binding *bindings) {
 							if (i == count)
 								break;
 						}
-						term = mkterm(NULL, cp->closure);
+						clo = cp->closure;
 					} else {
 						fail("$&parse", "bad unquoted primitive in %%closure: $&%s", prim);
 						NOTREACHED;
 					}
 				} else
-					term = mkstr(word->u[0].s);
-				list = mklist(term, list);
+					str = word->u[0].s;
+				list = mklist(str, clo, list);
 			}
 			bindings = mkbinding(name->u[0].s, list, bindings);
 		}

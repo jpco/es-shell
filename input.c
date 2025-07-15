@@ -231,7 +231,7 @@ extern Tree *parse(char *pr1, char *pr2) {
 	emptyherequeue();
 
 	if (ISEOF(input))
-		throw(mklist(mkstr("eof"), NULL));
+		throw(mklist("eof", NULL, NULL));
 
 #if HAVE_READLINE
 	prompt = (pr1 == NULL) ? "" : pr1;
@@ -294,7 +294,7 @@ extern List *runinput(Input *in, int runflags) {
 					 + ((flags & run_noexec) ? 2 : 0)],
 			      NULL);
 		if (flags & eval_exitonfalse) {
-			dispatch = mklist(mkstr("%exit-on-false"), dispatch);
+			dispatch = mklist("%exit-on-false", NULL, dispatch);
 			flags &= ~eval_exitonfalse;
 		}
 		varpush(&push, "fn-%dispatch", dispatch);

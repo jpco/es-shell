@@ -7,7 +7,7 @@ PRIM(seq) {
 	Ref(List *, result, ltrue);
 	Ref(List *, lp, list);
 	for (; lp != NULL; lp = lp->next)
-		result = eval1(lp->term, evalflags &~ (lp->next == NULL ? 0 : eval_inchild));
+		result = eval1(lp, evalflags &~ (lp->next == NULL ? 0 : eval_inchild));
 	RefEnd(lp);
 	RefReturn(result);
 }
@@ -17,11 +17,11 @@ PRIM(if) {
 	for (; lp != NULL; lp = lp->next) {
 		List *cond = ltrue;
 		if (lp->next != NULL) {
-			cond = eval1(lp->term, 0);
+			cond = eval1(lp, 0);
 			lp = lp->next;
 		}
 		if (istrue(cond)) {
-			List *result = eval1(lp->term, evalflags);
+			List *result = eval1(lp, evalflags);
 			RefPop(lp);
 			return result;
 		}
@@ -67,13 +67,13 @@ PRIM(catch) {
 			ExceptionHandler
 				result
 				  = prim("noreturn",
-					 mklist(lp->term, frombody),
+					 mklist(lp->str, lp->closure, frombody),
 					 NULL,
 					 evalflags);
 				unblocksignals();
 			CatchException (fromcatcher)
 
-				if (termeq(fromcatcher->term, "retry")) {
+				if (termeq(fromcatcher, "retry")) {
 					retry = TRUE;
 					unblocksignals();
 				} else {

@@ -9,11 +9,11 @@
 
 DefineTag(List, static);
 
-extern List *mklist(Term *term, List *next) {
+extern List *mklist(char *str, Closure *closure, List *next) {
 	gcdisable();
-	assert(term != NULL);
 	Ref(List *, list, gcnew(List));
-	list->term = term;
+	list->str = str;
+	list->closure = closure;
 	list->next = next;
 	gcenable();
 	RefReturn(list);
@@ -27,9 +27,90 @@ static void *ListCopy(void *op) {
 
 static size_t ListScan(void *p) {
 	List *list = p;
-	list->term = forward(list->term);
+	list->str = forward(list->str);
+	list->closure = forward(list->closure);
 	list->next = forward(list->next);
 	return sizeof (List);
+}
+
+
+/*
+ * single term functions
+ */
+
+extern Closure *getclosure(List *term) {
+	if (term->closure == NULL) {
+		char *s = term->str;
+		assert(s != NULL);
+		if (
+			((*s == '{' || *s == '@') && s[strlen(s) - 1] == '}')
+			|| (*s == '$' && s[1] == '&')
+			|| hasprefix(s, "%closure")
+		) {
+			Closure *c;
+			Ref(List *, tp, term);
+			Ref(Tree *, np, parsestring(s));
+			if (np == NULL) {
+				RefPop2(np, tp);
+				return NULL;
+			}
+			c = extractbindings(np);
+			tp->closure = c;
+			tp->str = NULL;
+			term = tp;
+			RefEnd2(np, tp);
+		}
+	}
+	return term->closure;
+}
+
+extern char *getstr(List *term) {
+	char *s = term->str;
+	Closure *closure = term->closure;
+	assert((s == NULL) != (closure == NULL));
+	if (s != NULL)
+		return s;
+
+#if 0	/* TODO: decide whether getstr() leaves term in closure or string form */
+	Ref(Term *, tp, term);
+	s = str("%C", closure);
+	tp->str = s;
+	tp->closure = NULL;
+	RefEnd(tp);
+	return s;
+#else
+	return str("%C", closure);
+#endif
+}
+
+extern List *termcat(List *t1, List *t2) {
+	if (t1 == NULL)
+		return t2;
+	if (t2 == NULL)
+		return t1;
+
+	Ref(List *, term, mklist(NULL, NULL, NULL));
+	Ref(char *, str1, getstr(t1));
+	Ref(char *, str2, getstr(t2));
+	term->str = str("%s%s", str1, str2);
+	RefEnd2(str2, str1);
+	RefReturn(term);
+}
+
+extern Boolean termeq(List *term, const char *s) {
+	assert(term != NULL);
+	if (term->str == NULL)
+		return FALSE;
+	return streq(term->str, s);
+}
+
+extern Boolean isclosure(List *term) {
+	assert(term != NULL);
+	return term->closure != NULL;
+}
+
+extern List *termcopy(List *term) {
+	return mklist(term->str, term->closure, NULL);
 }
 
 
@@ -63,7 +144,7 @@ extern List *append(List *head, List *tail) {
 	RefEnd2(tp, hp);
 
 	for (prevp = &lp; head != NULL; head = head->next) {
-		List *np = mklist(head->term, NULL);
+		List *np = mklist(head->str, head->closure, NULL);
 		*prevp = np;
 		prevp = &np->next;
 	}
@@ -90,19 +171,16 @@ extern int length(List *list) {
 /* listify -- turn an argc/argv vector into a list */
 extern List *listify(int argc, char **argv) {
 	Ref(List *, list, NULL);
-	while (argc > 0) {
-		Term *term = mkstr(argv[--argc]);
-		list = mklist(term, list);
-	}
+	while (argc > 0)
+		list = mklist(argv[--argc], NULL, list);
 	RefReturn(list);
 }
 
 /* nth -- return nth element of a list, indexed from 1 */
-extern Term *nth(List *list, int n) {
+extern List *nth(List *list, int n) {
 	for (; n > 0 && list != NULL; list = list->next) {
-		assert(list->term != NULL);
 		if (--n == 0)
-			return list->term;
+			return list;
 	}
 	return NULL;
 }

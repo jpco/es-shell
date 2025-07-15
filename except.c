@@ -57,9 +57,9 @@ extern Noreturn fail VARARGS2(const char *, from, const char *, fmt) {
 	va_end(args);
 
 	gcdisable();
-	Ref(List *, e, mklist(mkstr("error"),
-			      mklist(mkstr((char *) from),
-				     mklist(mkstr(s), NULL))));
+	Ref(List *, e, mklist("error", NULL,
+			      mklist((char *) from, NULL,
+				     mklist(s, NULL, NULL))));
 	while (gcisblocked())
 		gcenable();
 	throw(e);

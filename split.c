@@ -42,15 +42,15 @@ extern char *stepsplit(char *in, size_t len, Boolean endword) {
 
 	if (splitchars) {
 		Boolean end;
-		Term *term;
+		char *ds;
 
 		if (*s == '\0') return NULL;
 		assert(buf == NULL);
 
 		end = *(s + 1) == '\0';
 
-		term = mkstr(gcndup((char *) s, 1));
-		value = mklist(term, value);
+		ds = gcndup((char *) s, 1);
+		value = mklist(ds, NULL, value);
 
 		if (end) return NULL;
 		return (char *) ++s;
@@ -63,8 +63,8 @@ extern char *stepsplit(char *in, size_t len, Boolean endword) {
 		int c = *s++;
 		if (buf != NULL)
 			if (isifs[c]) {
-				Term *term = mkstr(sealcountedbuffer(buf));
-				value = mklist(term, value);
+				char *b = sealcountedbuffer(buf);
+				value = mklist(b, NULL, value);
 				buffer = buf = coalesce ? NULL : openbuffer(0);
 				return (char *) s;
 			} else
@@ -74,8 +74,8 @@ extern char *stepsplit(char *in, size_t len, Boolean endword) {
 	}
 
 	if (endword && buf != NULL) {
-		Term *term = mkstr(sealcountedbuffer(buf));
-		value = mklist(term, value);
+		char *b = sealcountedbuffer(buf);
+		value = mklist(b, NULL, value);
 		buf = NULL;
 	}
 	buffer = buf;
@@ -95,8 +95,8 @@ extern List *endsplit(void) {
 	List *result;
 
 	if (buffer != NULL) {
-		Term *term = mkstr(sealcountedbuffer(buffer));
-		value = mklist(term, value);
+		char *s = sealcountedbuffer(buffer);
+		value = mklist(s, NULL, value);
 		buffer = NULL;
 	}
 	result = reverse(value);
@@ -108,9 +108,9 @@ extern List *fsplit(const char *sep, List *list, Boolean coalesce) {
 	Ref(List *, lp, list);
 	startsplit(sep, coalesce);
 	for (; lp != NULL; lp = lp->next) {
-		char *bs = getstr(lp->term), *s = bs;
+		char *bs = getstr(lp), *s = bs;
 		do {
-			char *ns = getstr(lp->term);
+			char *ns = getstr(lp);
 			s = ns + (s - bs);
 			bs = ns;
 			s = stepsplit(s, strlen(s), TRUE);

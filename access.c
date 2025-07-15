@@ -119,19 +119,19 @@ PRIM(access) {
 	esoptbegin(list, "$&access", usage, TRUE);
 	while ((c = esopt("bcdefln:prswx1")) != EOF)
 		switch (c) {
-		case 'n':	suffix = getstr(esoptarg());	break;
-		case '1':	first = TRUE;			break;
-		case 'e':	throws = TRUE;			break;
-		case 'r':	perm |= READ;			break;
-		case 'w':	perm |= WRITE;			break;
-		case 'x':	perm |= EXEC;			break;
-		case 'f':	type = IFREG;			break;
-		case 'd':	type = IFDIR;			break;
-		case 'c':	type = IFCHR;			break;
-		case 'b':	type = IFBLK;			break;
-		case 'l':	type = IFLNK;			break;
-		case 's':	type = IFSOCK;			break;
-		case 'p':	type = IFIFO;			break;
+		case 'n':	suffix = esoptarg();	break;
+		case '1':	first = TRUE;		break;
+		case 'e':	throws = TRUE;		break;
+		case 'r':	perm |= READ;		break;
+		case 'w':	perm |= WRITE;		break;
+		case 'x':	perm |= EXEC;		break;
+		case 'f':	type = IFREG;		break;
+		case 'd':	type = IFDIR;		break;
+		case 'c':	type = IFCHR;		break;
+		case 'b':	type = IFBLK;		break;
+		case 'l':	type = IFLNK;		break;
+		case 's':	type = IFSOCK;		break;
+		case 'p':	type = IFIFO;		break;
 		default:
 			esoptend();
 			fail("$&access", "access -%c is not supported on this system", c);
@@ -142,7 +142,7 @@ PRIM(access) {
 		int error;
 		char *name;
 
-		name = getstr(list->term);
+		name = getstr(list);
 		if (suffix != NULL)
 			name = pathcat(name, suffix);
 		error = testfile(name, perm, type);
@@ -150,17 +150,18 @@ PRIM(access) {
 		if (first) {
 			if (error == 0) {
 				Ref(List *, result,
-					mklist(mkstr(suffix == NULL
+					mklist(suffix == NULL
 							? name
-							: gcdup(name)),
+							: gcdup(name),
+					       NULL,
 					       NULL));
 				gcenable();
 				RefReturn(result);
 			} else if (error != ENOENT)
 				estatus = error;
 		} else
-			lp = mklist(mkstr(error == 0 ? "0" : gcdup(esstrerror(error))),
-				    lp);
+			lp = mklist(error == 0 ? "0" : gcdup(esstrerror(error)),
+				    NULL, lp);
 	}
 
 	if (first && throws) {

@@ -33,17 +33,15 @@ static void initpath(void) {
 	static const char * const path[] = { INITIAL_PATH };
 
 	Ref(List *, list, NULL);
-	for (i = arraysize(path); i-- > 0;) {
-		Term *t = mkstr((char *) path[i]);
-		list = mklist(t, list);
-	}
+	for (i = arraysize(path); i-- > 0;)
+		list = mklist((char *)path[i], NULL, list);
 	vardef("path", NULL, list);
 	RefEnd(list);
 }
 
 /* initpid -- set $pid for this shell */
 static void initpid(void) {
-	vardef("pid", NULL, mklist(mkstr(str("%d", getpid())), NULL));
+	vardef("pid", NULL, mklist(str("%d", getpid()), NULL, NULL));
 }
 
 /* runesrc -- run the user's profile, if it exists */
@@ -54,9 +52,9 @@ static void runesrc(void) {
 		ExceptionHandler
 			runfd(fd, esrc, 0);
 		CatchException (e)
-			if (termeq(e->term, "exit"))
+			if (termeq(e, "exit"))
 				exit(exitstatus(e->next));
-			else if (termeq(e->term, "error")) {
+			else if (termeq(e, "error")) {
 				eprint("%L\n",
 				       e->next == NULL ? NULL : e->next->next,
 				       " ");
@@ -129,7 +127,7 @@ int main(int argc, char **argv0) {
 	esoptbegin(args->next, NULL, NULL, FALSE);
 	while ((c = esopt("eilxvnpodsc:?GIL")) != EOF)
 		switch (c) {
-		case 'c':	cmd = getstr(esoptarg());	break;
+		case 'c':	cmd = esoptarg();		break;
 		case 'e':	runflags |= eval_exitonfalse;	break;
 		case 'i':	runflags |= run_interactive;	break;
 		case 'n':	runflags |= run_noexec;		break;
@@ -199,7 +197,7 @@ getopt_done:
 
 		if (cmd == NULL && !cmd_stdin && argp != NULL) {
 			int fd;
-			char *file = getstr(argp->term);
+			char *file = getstr(argp);
 			argp = argp->next;
 			if ((fd = eopen(file, oOpen)) == -1) {
 				eprint("%s: %s\n", file, esstrerror(errno));
@@ -207,24 +205,25 @@ getopt_done:
 				goto return_main;
 			}
 			vardef("*", NULL, argp);
-			vardef("0", NULL, mklist(mkstr(file), NULL));
+			vardef("0", NULL, mklist(file, NULL, NULL));
 			status = exitstatus(runfd(fd, file, runflags));
 			goto return_main;
 		}
 
 		vardef("*", NULL, argp);
-		vardef("0", NULL, mklist(mkstr(argv[0]), NULL));
-		if (cmd != NULL)
-			status = exitstatus(runstring(cmd, NULL, runflags));
-		else
+		vardef("0", NULL, mklist(argv[0], NULL, NULL));
+		if (cmd != NULL) {
+			List *s = runstring(cmd, NULL, runflags);
+			status = exitstatus(s);
+		} else
 			status = exitstatus(runfd(0, "stdin", runflags));
 
 	CatchException (e)
 
-		if (termeq(e->term, "exit")) {
+		if (termeq(e, "exit")) {
 			status = exitstatus(e->next);
 			goto return_main;
-		} else if (termeq(e->term, "error")) {
+		} else if (termeq(e, "error")) {
 			eprint("%L\n",
 			       e->next == NULL ? NULL : e->next->next,
 			       " ");

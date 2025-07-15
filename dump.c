@@ -208,23 +208,6 @@ static char *dumpclosure(Closure *closure) {
 	return name;
 }
 
-static char *dumpterm(Term *term) {
-	char *name;
-	if (term == NULL)
-		return "NULL";
-	name = str("&E_%ulx", term);
-	if (dictget(cvars, name) == NULL) {
-		print(
-			"static const Term %s = { (char *) %s, (Closure *) %s };\n",
-			name + 1,
-			dumpstring(term->str),
-			dumpclosure(term->closure)
-		);
-		cvars = dictput(cvars, name, term);
-	}
-	return name;
-}
-
 static char *dumplist(List *list) {
 	char *name;
 	if (list == NULL)
@@ -232,9 +215,10 @@ static char *dumplist(List *list) {
 	name = str("&L_%ulx", list);
 	if (dictget(cvars, name) == NULL) {
 		print(
-			"static const List %s = { (Term *) %s, (List *) %s };\n",
+			"static const List %s = { (char *) %s, (Closure *) %s, (List *) %s };\n",
 			name + 1,
-			dumpterm(list->term),
+			dumpstring(list->str),
+			dumpclosure(list->closure),
 			dumplist(list->next)
 		);
 		cvars = dictput(cvars, name, list);

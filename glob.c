@@ -62,7 +62,7 @@ static List *dirmatch(const char *prefix, const char *dirname, const char *patte
 		char *name = str("%s%s", prefix, pattern);
 		if (lstat(name, &s) == -1)
 			return NULL;
-		return mklist(mkstr(name), NULL);
+		return mklist(name, NULL, NULL);
 	}
 
 	assert(gcisblocked());
@@ -73,9 +73,9 @@ static List *dirmatch(const char *prefix, const char *dirname, const char *patte
 	for (list = NULL, prevp = &list; (dp = readdir(dirp)) != NULL;)
 		if (match(dp->d_name, pattern, quote)
 		    && (!ishiddenfile(dp->d_name) || *pattern == '.')) {
-			List *lp = mklist(mkstr(str("%s%s",
-						    prefix, dp->d_name)),
-					  NULL);
+			List *lp = mklist(str("%s%s",
+						    prefix, dp->d_name),
+					  NULL, NULL);
 			*prevp = lp;
 			prevp = &lp->next;
 		}
@@ -93,10 +93,10 @@ static List *listglob(List *list, char *pattern, char *quote, size_t slashcount)
 		static char *prefix = NULL;
 		static size_t prefixlen = 0;
 
-		assert(list->term != NULL);
-		assert(!isclosure(list->term));
+		assert(list != NULL);
+		assert(!isclosure(list));
 		
-		dir = getstr(list->term);
+		dir = getstr(list);
 		dirlen = strlen(dir);
 		if (dirlen + slashcount + 1 >= prefixlen) {
 			prefixlen = dirlen + slashcount + 1;
@@ -156,7 +156,7 @@ static List *glob1(const char *pattern, const char *quote) {
 		return dirmatch("", ".", dir, qdir);
 
 	matched = (*pattern == '/')
-			? mklist(mkstr(dir), NULL)
+			? mklist(dir, NULL, NULL)
 			: dirmatch("", ".", dir, qdir);
 	do {
 		size_t slashcount;
@@ -180,7 +180,7 @@ static List *glob0(List *list, StrList *quote) {
 		char *str;
 		if (
 			quote->str == QUOTED
-			|| !haswild(str = getstr(list->term), quote->str)
+			|| !haswild(str = getstr(list), quote->str)
 			|| (expand1 = glob1(str, quote->str)) == NULL
 		) {
 			*prevp = list;
@@ -214,7 +214,7 @@ static char *expandhome(char *s, StrList *qp) {
 	Ref(List *, list, NULL);
 	RefAdd(fn);
 	if (slash > 1)
-		list = mklist(mkstr(gcndup(s + 1, slash - 1)), NULL);
+		list = mklist(gcndup(s + 1, slash - 1), NULL, NULL);
 	RefRemove(fn);
 
 	list = eval(append(fn, list), NULL, 0);
@@ -222,7 +222,7 @@ static char *expandhome(char *s, StrList *qp) {
 	if (list != NULL) {
 		if (list->next != NULL)
 			fail("es:expandhome", "%%home returned more than one value");
-		Ref(char *, home, getstr(list->term));
+		Ref(char *, home, getstr(list));
 		if (c == '\0') {
 			string = home;
 			quote->str = QUOTED;
@@ -266,19 +266,17 @@ extern List *glob(List *list, StrList *quote) {
 
 	for (lp = list, qp = quote; lp != NULL; lp = lp->next, qp = qp->next)
 		if (qp->str != QUOTED) {
-			assert(lp->term != NULL);
-			assert(!isclosure(lp->term));
-			Ref(char *, str, getstr(lp->term));
+			assert(lp != NULL);
+			assert(!isclosure(lp));
+			Ref(char *, str, getstr(lp));
 			assert(qp->str == UNQUOTED || strlen(qp->str) == strlen(str));
 			if (hastilde(str, qp->str)) {
-				Term *tmp;
 				Ref(List *, l0, list);
 				Ref(List *, lr, lp);
 				Ref(StrList *, q0, quote);
 				Ref(StrList *, qr, qp);
 				str = expandhome(str, qp);
-				tmp = mkstr(str);
-				lr->term = tmp;
+				lr->str = str;
 				lp = lr;
 				qp = qr;
 				list = l0;

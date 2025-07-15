@@ -221,17 +221,17 @@ extern void setsigdefaults(void) {
  */
 
 extern Boolean issilentsignal(List *e) {
-	return (termeq(e->term, "signal"))
+	return (termeq(e, "signal"))
 		&& e->next != NULL
-		&& termeq(e->next->term, "sigint");
+		&& termeq(e->next, "sigint");
 }
 
 extern void exitonsignal(List *exception) {
 	int sig;
 	Sigeffect e;
-	if (exception == NULL || exception->next == NULL || !termeq(exception->term, "signal"))
+	if (exception == NULL || exception->next == NULL || !termeq(exception, "signal"))
 		return;
-	sig = signumber(getstr(exception->next->term));
+	sig = signumber(getstr(exception->next));
 	if (sig == -1)
 		return;
 
@@ -261,9 +261,8 @@ extern List *mksiglist(void) {
 		Ref(char *, name, signame(sig));
 		if (prefix != '\0')
 			name = str("%c%s", prefix, name);
-		Ref(Term *, term, mkstr(name));
-		lp = mklist(term, lp);
-		RefEnd2(term, name);
+		lp = mklist(name, NULL, lp);
+		RefEnd(name);
 	}
 	RefReturn(lp);
 }
@@ -311,7 +310,7 @@ extern void sigchk(void) {
 	resetparser();
 	Ref(List *, e, NULL);
 	gcdisable();
-	e = mklist(mkstr("signal"), mklist(mkstr(signame(sig)), NULL));
+	e = mklist("signal", NULL, mklist(signame(sig), NULL, NULL));
 	gcenable();
 
 	switch (sigeffect[sig]) {

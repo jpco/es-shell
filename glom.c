@@ -11,7 +11,7 @@ extern List *concat(List *list1, List *list2) {
 	for (p = &result; list1 != NULL; list1 = list1->next) {
 		List *lp;
 		for (lp = list2; lp != NULL; lp = lp->next) {
-			List *np = mklist(termcat(list1->term, lp->term), NULL);
+			List *np = termcat(list1, lp);
 			*p = np;
 			p = &np->next;
 		}
@@ -23,7 +23,7 @@ extern List *concat(List *list1, List *list2) {
 }
 
 /* qcat -- concatenate two quote flag terms */
-static char *qcat(const char *q1, const char *q2, Term *t1, Term *t2) {
+static char *qcat(const char *q1, const char *q2, List *t1, List *t2) {
 	size_t len1, len2;
 	char *result, *s;
 
@@ -69,10 +69,10 @@ static List *qconcat(List *list1, List *list2, StrList *ql1, StrList *ql2, StrLi
 		for (lp = list2, qlp = ql2; lp != NULL; lp = lp->next, qlp = qlp->next) {
 			List *np;
 			StrList *nq;
-			np = mklist(termcat(list1->term, lp->term), NULL);
+			np = termcat(list1, lp);
 			*p = np;
 			p = &np->next;
-			nq = mkstrlist(qcat(ql1->str, qlp->str, list1->term, lp->term), NULL);
+			nq = mkstrlist(qcat(ql1->str, qlp->str, list1, lp), NULL);
 			*qp = nq;
 			qp = &nq->next;
 		}
@@ -96,29 +96,29 @@ static List *subscript(List *list, List *subs) {
 	current = list;
 	counter = 1;
 
-	if (subs != NULL && streq(getstr(subs->term), "...")) {
+	if (subs != NULL && streq(getstr(subs), "...")) {
 		lo = 1;
 		goto mid_range;
 	}
 
 	while (subs != NULL) {
-		lo = atoi(getstr(subs->term));
+		lo = atoi(getstr(subs));
 		if (lo < 1) {
-			Ref(char *, bad, getstr(subs->term));
+			Ref(char *, bad, getstr(subs));
 			gcenable();
 			fail("es:subscript", "bad subscript: %s", bad);
 			RefEnd(bad);
 		}
 		subs = subs->next;
-		if (subs != NULL && streq(getstr(subs->term), "...")) {
+		if (subs != NULL && streq(getstr(subs), "...")) {
 		mid_range:
 			subs = subs->next;
 			if (subs == NULL)
 				hi = len;
 			else {
-				hi = atoi(getstr(subs->term));
+				hi = atoi(getstr(subs));
 				if (hi < 1) {
-					Ref(char *, bad, getstr(subs->term));
+					Ref(char *, bad, getstr(subs));
 					gcenable();
 					fail("es:subscript", "bad subscript: %s", bad);
 					RefEnd(bad);
@@ -138,7 +138,7 @@ static List *subscript(List *list, List *subs) {
 		for (; counter < lo; counter++, current = current->next)
 			;
 		for (; counter <= hi; counter++, current = current->next) {
-			*prevp = mklist(current->term, NULL);
+			*prevp = termcopy(current);
 			prevp = &(*prevp)->next;
 		}
 	}
@@ -162,27 +162,27 @@ static List *glom1(Tree *tree, Binding *binding) {
 
 		switch (tp->kind) {
 		case nQword:
-			list = mklist(mkterm(tp->u[0].s, NULL), NULL);
+			list = mklist(tp->u[0].s, NULL, NULL);
 			tp = NULL;
 			break;
 		case nWord:
-			list = mklist(mkterm(tp->u[0].s, NULL), NULL);
+			list = mklist(tp->u[0].s, NULL, NULL);
 			tp = NULL;
 			break;
 		case nThunk:
 		case nLambda:
-			list = mklist(mkterm(NULL, mkclosure(tp, bp)), NULL);
+			list = mklist(NULL, mkclosure(tp, bp), NULL);
 			tp = NULL;
 			break;
 		case nPrim:
-			list = mklist(mkterm(NULL, mkclosure(tp, NULL)), NULL);
+			list = mklist(NULL, mkclosure(tp, NULL), NULL);
 			tp = NULL;
 			break;
 		case nVar:
 			Ref(List *, var, glom1(tp->u[0].p, bp));
 			tp = NULL;
 			for (; var != NULL; var = var->next) {
-				list = listcopy(varlookup(getstr(var->term), bp));
+				list = listcopy(varlookup(getstr(var), bp));
 				if (list != NULL) {
 					if (result == NULL)
 						tail = result = list;
@@ -201,17 +201,19 @@ static List *glom1(Tree *tree, Binding *binding) {
 				fail("es:glom", "null variable name in subscript");
 			if (list->next != NULL)
 				fail("es:glom", "multi-word variable name in subscript");
-			Ref(char *, name, getstr(list->term));
+			Ref(char *, name, getstr(list));
 			list = varlookup(name, bp);
 			Ref(List *, sub, glom1(tp->u[1].p, bp));
 			tp = NULL;
 			list = subscript(list, sub);
 			RefEnd2(sub, name);
 			break;
-		case nCall:
-			list = listcopy(walk(tp->u[0].p, bp, 0));
+		case nCall: {
+			List *l = walk(tp->u[0].p, bp, 0);
+			list = listcopy(l);
 			tp = NULL;
 			break;
+		}
 		case nList:
 			list = glom1(tp->u[0].p, bp);
 			tp = tp->u[1].p;
@@ -265,7 +267,7 @@ extern List *glom2(Tree *tree, Binding *binding, StrList **quotep) {
 
 		switch (tp->kind) {
 		case nWord:
-			list = mklist(mkterm(tp->u[0].s, NULL), NULL);
+			list = mklist(tp->u[0].s, NULL, NULL);
 			qlist = mkstrlist(UNQUOTED, NULL);
 			tp = NULL;
 			break;

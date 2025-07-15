@@ -42,8 +42,8 @@ static Boolean specialvar(const char *name) {
 
 static Boolean hasbindings(List *list) {
 	for (; list != NULL; list = list->next)
-		if (isclosure(list->term)) {
-			Closure *closure = getclosure(list->term);
+		if (isclosure(list)) {
+			Closure *closure = getclosure(list);
 			assert(closure != NULL);
 			if (closure->binding != NULL)
 				return TRUE;
@@ -124,7 +124,7 @@ extern void setnoexport(List *list) {
 	}
 	gcdisable();
 	for (noexport = mkdict(); list != NULL; list = list->next)
-		noexport = dictput(noexport, getstr(list->term), &noexportchar);
+		noexport = dictput(noexport, getstr(list), &noexportchar);
 	gcenable();
 }
 
@@ -133,10 +133,10 @@ extern List *varlookup(const char *name, Binding *bp) {
 	Var *var;
 
 	if (iscounting(name)) {
-		Term *term = nth(varlookup("*", bp), strtol(name, NULL, 10));
+		List *term = nth(varlookup("*", bp), strtol(name, NULL, 10));
 		if (term == NULL)
 			return NULL;
-		return mklist(term, NULL);
+		return termcopy(term);
 	}
 
 	validatevar(name);
@@ -172,7 +172,7 @@ static List *callsettor(char *name, List *defn) {
 
 	Ref(List *, lp, defn);
 	Ref(List *, fn, settor);
-	varpush(&p, "0", mklist(mkstr(name), NULL));
+	varpush(&p, "0", mklist(name, NULL, NULL));
 
 	lp = listcopy(eval(append(fn, lp), NULL, 0));
 
@@ -336,8 +336,7 @@ extern Vector *mkenv(void) {
 /* addtolist -- dictforall procedure to create a list */
 extern void addtolist(void *arg, char *key, void UNUSED *value) {
 	List **listp = arg;
-	Term *term = mkstr(key);
-	*listp = mklist(term, *listp);
+	*listp = mklist(key, NULL, *listp);
 }
 
 static void listexternal(void *arg, char *key, void *value) {
@@ -401,14 +400,14 @@ static void importvar(char *name0, char *value) {
 
 	Ref(char *, name, name0);
 	Ref(List *, defn, NULL);
-	defn = fsplit(sep, mklist(mkstr(value), NULL), FALSE);
+	defn = fsplit(sep, mklist(value, NULL, NULL), FALSE);
 
 	if (strchr(value, ENV_ESCAPE) != NULL) {
 		List *list;
 		gcdisable();
 		for (list = defn; list != NULL; list = list->next) {
 			int offset = 0;
-			const char *word = list->term->str;
+			const char *word = list->str;
 			const char *escape;
 			while ((escape = strchr(word + offset, ENV_ESCAPE))
 			       != NULL) {
@@ -417,7 +416,7 @@ static void importvar(char *name0, char *value) {
 				    case '\0':
 					if (list->next != NULL) {
 						const char *str2
-						  = list->next->term->str;
+						  = list->next->str;
 						char *str
 						  = gcalloc(offset
 							    + strlen(str2) + 1,
@@ -426,7 +425,7 @@ static void importvar(char *name0, char *value) {
 						str[offset - 1]
 						  = ENV_SEPARATOR;
 						strcpy(str + offset, str2);
-						list->term->str = str;
+						list->str = str;
 						list->next = list->next->next;
 					}
 					break;
@@ -435,7 +434,7 @@ static void importvar(char *name0, char *value) {
 					  = gcalloc(strlen(word), &StringTag);
 					memcpy(str, word, offset);
 					strcpy(str + offset, escape + 2);
-					list->term->str = str;
+					list->str = str;
 					offset += 1;
 					break;
 				    }

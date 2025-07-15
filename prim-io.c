@@ -24,7 +24,7 @@ static List *redir(List *(*rop)(int *fd, List *list), List *list, int evalflags)
 
 	assert(list != NULL);
 	Ref(List *, lp, list);
-	destfd = getnumber(getstr(lp->term));
+	destfd = getnumber(getstr(lp));
 	lp = (*rop)(&srcfd, lp->next);
 
 	ticket = (srcfd == -1)
@@ -67,7 +67,7 @@ REDIR(openfile) {
 	assert(length(list) == 3);
 	Ref(List *, lp, list);
 
-	mode = getstr(lp->term);
+	mode = getstr(lp);
 	lp = lp->next;
 	for (i = 0;; i++) {
 		if (modes[i].name == NULL)
@@ -78,7 +78,7 @@ REDIR(openfile) {
 		}
 	}
 
-	name = getstr(lp->term);
+	name = getstr(lp);
 	lp = lp->next;
 	fd = eopen(name, kind);
 	if (fd == -1)
@@ -103,7 +103,7 @@ REDIR(dup) {
 	int fd;
 	assert(length(list) == 2);
 	Ref(List *, lp, list);
-	fd = dup(fdmap(getnumber(getstr(lp->term))));
+	fd = dup(fdmap(getnumber(getstr(lp))));
 	if (fd == -1)
 		fail("$&dup", "dup: %s", esstrerror(errno));
 	*srcfdp = fd;
@@ -168,7 +168,7 @@ PRIM(here) {
 	if (length(list) < 2)
 		argcount("%here fd [word ...] cmd");
 
-	fd = getnumber(getstr(list->term));
+	fd = getnumber(getstr(list));
 	Ref(List *, lp, list->next);
 	for (tailp = &lp; (tail = *tailp)->next != NULL; tailp = &tail->next)
 		;
@@ -243,12 +243,12 @@ PRIM(pipe) {
 				mvfd(inpipe, infd);
 			}
 			if (list->next != NULL) {
-				int fd = getnumber(getstr(list->next->term));
+				int fd = getnumber(getstr(list->next));
 				releasefd(fd);
 				mvfd(p[1], fd);
 				close(p[0]);
 			}
-			esexit(exitstatus(eval1(list->term, evalflags | eval_inchild)));
+			esexit(exitstatus(eval1(list, evalflags | eval_inchild)));
 		}
 		pids[n++] = pid;
 		if (inpipe != -1)
@@ -256,18 +256,17 @@ PRIM(pipe) {
 		if (list->next == NULL)
 			break;
 		list = list->next->next;
-		infd = getnumber(getstr(list->term));
+		infd = getnumber(getstr(list));
 		inpipe = p[0];
 		close(p[1]);
 	}
 
 	Ref(List *, result, NULL);
 	do {
-		Term *t;
 		int status = ewaitfor(pids[--n]);
+		char *s = mkstatus(status);
 		printstatus(0, status);
-		t = mkstr(mkstatus(status));
-		result = mklist(t, result);
+		result = mklist(s, NULL, result);
 	} while (0 < n);
 	if (evalflags & eval_inchild)
 		esexit(exitstatus(result));
@@ -283,11 +282,10 @@ PRIM(readfrom) {
 	if (length(list) != 3)
 		argcount("%readfrom var input cmd");
 	Ref(List *, lp, list);
-	Ref(char *, var, getstr(lp->term));
+	Ref(char *, var, getstr(lp));
+	Ref(List *, input, lp->next);
 	lp = lp->next;
-	Ref(Term *, input, lp->term);
-	lp = lp->next;
-	Ref(Term *, cmd, lp->term);
+	Ref(List *, cmd, lp->next->next);
 
 	if ((pid = pipefork(p, NULL)) == 0) {
 		close(p[0]);
@@ -296,7 +294,7 @@ PRIM(readfrom) {
 	}
 
 	close(p[1]);
-	lp = mklist(mkstr(str(DEVFD_PATH, p[0])), NULL);
+	lp = mklist(str(DEVFD_PATH, p[0]), NULL, NULL);
 	varpush(&push, var, lp);
 
 	ExceptionHandler
@@ -323,11 +321,9 @@ PRIM(writeto) {
 	if (length(list) != 3)
 		argcount("%writeto var output cmd");
 	Ref(List *, lp, list);
-	Ref(char *, var, getstr(lp->term));
-	lp = lp->next;
-	Ref(Term *, output, lp->term);
-	lp = lp->next;
-	Ref(Term *, cmd, lp->term);
+	Ref(char *, var, getstr(lp));
+	Ref(List *, output, lp->next);
+	Ref(List *, cmd, lp->next->next);
 
 	if ((pid = pipefork(p, NULL)) == 0) {
 		close(p[1]);
@@ -336,7 +332,7 @@ PRIM(writeto) {
 	}
 
 	close(p[0]);
-	lp = mklist(mkstr(str(DEVFD_PATH, p[1])), NULL);
+	lp = mklist(str(DEVFD_PATH, p[1]), NULL, NULL);
 	varpush(&push, var, lp);
 
 	ExceptionHandler
@@ -384,7 +380,7 @@ PRIM(backquote) {
 		fail(caller, "usage: backquote separator command [args ...]");
 
 	Ref(List *, lp, list);
-	Ref(char *, sep, getstr(lp->term));
+	Ref(char *, sep, getstr(lp));
 	lp = lp->next;
 
 	if ((pid = pipefork(p, NULL)) == 0) {
@@ -399,7 +395,7 @@ PRIM(backquote) {
 	close(p[0]);
 	status = ewaitfor(pid);
 	printstatus(0, status);
-	lp = mklist(mkstr(mkstatus(status)), lp);
+	lp = mklist(mkstatus(status), NULL, lp);
 	gcenable();
 	list = lp;
 	RefEnd2(sep, lp);
@@ -410,7 +406,7 @@ PRIM(backquote) {
 PRIM(newfd) {
 	if (list != NULL)
 		fail("$&newfd", "usage: $&newfd");
-	return mklist(mkstr(str("%d", newfd())), NULL);
+	return mklist(str("%d", newfd()), NULL, NULL);
 }
 
 /* read1 -- read one byte */
@@ -446,7 +442,7 @@ PRIM(read) {
 		buffer = NULL;
 		return NULL;
 	} else {
-		List *result = mklist(mkstr(sealcountedbuffer(buffer)), NULL);
+		List *result = mklist(sealcountedbuffer(buffer), NULL, NULL);
 		buffer = NULL;
 		return result;
 	}

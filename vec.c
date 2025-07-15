@@ -40,7 +40,7 @@ extern Vector *vectorize(List *list) {
 	v->count = n;
 
 	for (i = 0; lp != NULL; lp = lp->next, i++) {
-		char *s = getstr(lp->term); /* must evaluate before v->vector[i] */
+		char *s = getstr(lp); /* must evaluate before v->vector[i] */
 		v->vector[i] = s;
 	}
 

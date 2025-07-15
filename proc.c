@@ -161,8 +161,8 @@ PRIM(apids) {
 	Ref(List *, lp, NULL);
 	for (p = proclist; p != NULL; p = p->next)
 		if (p->background) {
-			Term *t = mkstr(str("%d", p->pid));
-			lp = mklist(t, lp);
+			char *s = str("%d", p->pid);
+			lp = mklist(s, NULL, lp);
 		}
 	/* TODO: sort the return value, but by number? */
 	RefReturn(lp);
@@ -173,7 +173,7 @@ PRIM(wait) {
 	if (list == NULL)
 		pid = -1;
 	else if (list->next == NULL) {
-		pid = atoi(getstr(list->term));
+		pid = atoi(getstr(list));
 		if (pid <= 0) {
 			fail("$&wait", "wait: %d: bad pid", pid);
 			NOTREACHED;
@@ -182,7 +182,7 @@ PRIM(wait) {
 		fail("$&wait", "usage: wait [pid]");
 		NOTREACHED;
 	}
-	return mklist(mkstr(mkstatus(ewait(pid, TRUE))), NULL);
+	return mklist(mkstatus(ewait(pid, TRUE)), NULL, NULL);
 }
 
 extern Dict *initprims_proc(Dict *primdict) {

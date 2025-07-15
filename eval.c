@@ -10,7 +10,7 @@ static Noreturn failexec(char *file, List *args) {
 	fn = varlookup("fn-%exec-failure", NULL);
 	if (fn != NULL) {
 		int olderror = errno;
-		Ref(List *, list, append(fn, mklist(mkstr(file), args)));
+		Ref(List *, list, append(fn, mklist(file, NULL, args)));
 		RefAdd(file);
 		gcenable();
 		RefRemove(file);
@@ -42,7 +42,7 @@ extern List *forkexec(char *file, List *list, Boolean inchild) {
 	} else
 		SIGCHK();
 	printstatus(0, status);
-	return mklist(mkterm(mkstatus(status), NULL), NULL);
+	return mklist(mkstatus(status), NULL, NULL);
 }
 
 /* assign -- bind a list of values to a list of variables */
@@ -61,14 +61,14 @@ static List *assign(Tree *varform, Tree *valueform0, Binding *binding0) {
 
 	for (; vars != NULL; vars = vars->next) {
 		List *value;
-		Ref(char *, name, getstr(vars->term));
+		Ref(char *, name, getstr(vars));
 		if (values == NULL)
 			value = NULL;
 		else if (vars->next == NULL || values->next == NULL) {
 			value = values;
 			values = NULL;
 		} else {
-			value = mklist(values->term, NULL);
+			value = termcopy(values);
 			values = values->next;
 		}
 		vardef(name, binding, value);
@@ -101,14 +101,14 @@ static Binding *letbindings(Tree *defn0, Binding *outer0,
 
 		for (; vars != NULL; vars = vars->next) {
 			List *value;
-			Ref(char *, name, getstr(vars->term));
+			Ref(char *, name, getstr(vars));
 			if (values == NULL)
 				value = NULL;
 			else if (vars->next == NULL || values->next == NULL) {
 				value = values;
 				values = NULL;
 			} else {
-				value = mklist(values->term, NULL);
+				value = termcopy(values);
 				values = values->next;
 			}
 			binding = mkbinding(name, value, binding);
@@ -161,7 +161,7 @@ static List *local(Tree *defn, Tree *body0,
 /* forloop -- evaluate a for loop */
 static List *forloop(Tree *defn0, Tree *body0,
 		     Binding *binding, int evalflags) {
-	static List MULTIPLE = { NULL, NULL };
+	static List MULTIPLE = { NULL, NULL, NULL };
 
 	Ref(List *, result, ltrue);
 	Ref(Binding *, outer, binding);
@@ -180,7 +180,7 @@ static List *forloop(Tree *defn0, Tree *body0,
 		if (vars == NULL)
 			fail("es:for", "null variable name");
 		for (; vars != NULL; vars = vars->next) {
-			char *var = getstr(vars->term);
+			char *var = getstr(vars);
 			looping = mkbinding(var, list, looping);
 			list = &MULTIPLE;
 		}
@@ -203,8 +203,7 @@ static List *forloop(Tree *defn0, Tree *body0,
 					sequence = lp;
 				assert(sequence != NULL);
 				if (sequence->defn != NULL) {
-					value = mklist(sequence->defn->term,
-						       NULL);
+					value = termcopy(sequence->defn);
 					sequence->defn = sequence->defn->next;
 					allnull = FALSE;
 				}
@@ -223,7 +222,7 @@ static List *forloop(Tree *defn0, Tree *body0,
 
 	CatchException (e)
 
-		if (!termeq(e->term, "break"))
+		if (!termeq(e, "break"))
 			throw(e);
 		result = e->next;
 
@@ -334,7 +333,7 @@ extern Binding *bindargs(Tree *params, List *args, Binding *binding) {
 			value = args;
 			args = NULL;
 		} else {
-			value = mklist(args->term, NULL);
+			value = termcopy(args);
 			args = args->next;
 		}
 		binding = mkbinding(param->u[0].s, value, binding);
@@ -346,14 +345,13 @@ extern Binding *bindargs(Tree *params, List *args, Binding *binding) {
 }
 
 /* pathsearch -- evaluate fn %pathsearch + some argument */
-extern List *pathsearch(Term *term) {
+extern List *pathsearch(List *term) {
 	List *list;
 	Ref(List *, search, NULL);
 	search = varlookup("fn-%pathsearch", NULL);
 	if (search == NULL)
-		fail("es:pathsearch", "%E: fn %%pathsearch undefined", term);
-	list = mklist(term, NULL);
-	list = append(search, list);
+		fail("es:pathsearch", "%1L: fn %%pathsearch undefined", term);
+	list = append(search, termcopy(term));
 	RefEnd(search);
 	return eval(list, NULL, 0);
 }
@@ -376,9 +374,9 @@ restart:
 		--evaldepth;
 		return ltrue;
 	}
-	assert(list->term != NULL);
+	assert(list != NULL);
 
-	if ((cp = getclosure(list->term)) != NULL) {
+	if ((cp = getclosure(list)) != NULL) {
 		switch (cp->tree->kind) {
 		    case nPrim:
 			assert(cp->binding == NULL);
@@ -398,9 +396,7 @@ restart:
 							cp->binding));
 				if (funcname != NULL)
 					varpush(&p, "0",
-						    mklist(mkterm(funcname,
-								  NULL),
-							   NULL));
+						    mklist(funcname, NULL, NULL));
 				list = walk(tree->u[1].p, context, flags);
 				if (funcname != NULL)
 					varpop(&p);
@@ -408,7 +404,7 @@ restart:
 	
 			CatchException (e)
 
-				if (termeq(e->term, "return")) {
+				if (termeq(e, "return")) {
 					list = e->next;
 					goto done;
 				}
@@ -440,7 +436,7 @@ restart:
 
 	/* the logic here is duplicated in $&whatis */
 
-	Ref(char *, name, getstr(list->term));
+	Ref(char *, name, getstr(list));
 	fn = varlookup2("fn-", name, binding);
 	if (fn != NULL) {
 		funcname = name;
@@ -452,26 +448,24 @@ restart:
 		char *error = checkexecutable(name);
 		if (error != NULL)
 			fail("$&whatis", "%s: %s", name, error);
-		if (funcname != NULL) {
-			Term *fn = mkstr(funcname);
-			list = mklist(fn, list->next);
-		}
+		if (funcname != NULL)
+			list = mklist(funcname, NULL, list->next);
 		list = forkexec(name, list, flags & eval_inchild);
 		RefPop(name);
 		goto done;
 	}
 	RefEnd(name);
 
-	fn = pathsearch(list->term);
+	fn = pathsearch(list);
 	if (fn != NULL && fn->next == NULL
-	    && (cp = getclosure(fn->term)) == NULL) {
-		char *name = getstr(fn->term);
+	    && (cp = getclosure(fn)) == NULL) {
+		char *name = getstr(fn);
 		list = forkexec(name, list, flags & eval_inchild);
 		goto done;
 	}
 
 	if (fn != NULL)
-		funcname = getstr(list->term);
+		funcname = getstr(list);
 	list = append(fn, list->next);
 	goto restart;
 
@@ -484,6 +478,6 @@ done:
 }
 
 /* eval1 -- evaluate a term, producing a list */
-extern List *eval1(Term *term, int flags) {
-	return eval(mklist(term, NULL), NULL, flags);
+extern List *eval1(List *term, int flags) {
+	return eval(termcopy(term), NULL, flags);
 }

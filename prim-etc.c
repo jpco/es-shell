@@ -12,10 +12,10 @@ PRIM(result) {
 PRIM(echo) {
 	const char *eol = "\n";
 	if (list != NULL) {
-		if (termeq(list->term, "-n")) {
+		if (termeq(list, "-n")) {
 			eol = "";
 			list = list->next;
-		} else if (termeq(list->term, "--"))
+		} else if (termeq(list, "--"))
 			list = list->next;
 	}
 	print("%L%s", list, " ", eol);
@@ -23,7 +23,7 @@ PRIM(echo) {
 }
 
 PRIM(count) {
-	return mklist(mkstr(str("%d", length(list))), NULL);
+	return mklist(str("%d", length(list)), NULL, NULL);
 }
 
 PRIM(setnoexport) {
@@ -33,7 +33,7 @@ PRIM(setnoexport) {
 }
 
 PRIM(version) {
-	return mklist(mkstr((char *) version), NULL);
+	return mklist((char *) version, NULL, NULL);
 }
 
 PRIM(exec) {
@@ -61,14 +61,14 @@ PRIM(dot) {
 	if (lp == NULL)
 		fail("$&dot", "usage: %s", usage);
 
-	Ref(char *, file, getstr(lp->term));
+	Ref(char *, file, getstr(lp));
 	lp = lp->next;
 	fd = eopen(file, oOpen);
 	if (fd == -1)
 		fail("$&dot", "%s: %s", file, esstrerror(errno));
 
 	varpush(&star, "*", lp);
-	varpush(&zero, "0", mklist(mkstr(file), NULL));
+	varpush(&zero, "0", mklist(file, NULL, NULL));
 
 	result = runfd(fd, file, runflags);
 
@@ -83,8 +83,8 @@ PRIM(flatten) {
 	if (list == NULL)
 		fail("$&flatten", "usage: %%flatten separator [args ...]");
 	Ref(List *, lp, list);
-	sep = getstr(lp->term);
-	lp = mklist(mkstr(str("%L", lp->next, sep)), NULL);
+	sep = getstr(lp);
+	lp = mklist(str("%L", lp->next, sep), NULL, NULL);
 	RefReturn(lp);
 }
 
@@ -92,7 +92,7 @@ PRIM(whatis) {
 	/* the logic in here is duplicated in eval() */
 	if (list == NULL || list->next != NULL)
 		fail("$&whatis", "usage: $&whatis program");
-	Ref(Term *, term, list->term);
+	Ref(List *, term, list);
 	if (getclosure(term) == NULL) {
 		List *fn;
 		Ref(char *, prog, getstr(term));
@@ -119,7 +119,7 @@ PRIM(split) {
 	if (list == NULL)
 		fail("$&split", "usage: %%split separator [args ...]");
 	Ref(List *, lp, list);
-	sep = getstr(lp->term);
+	sep = getstr(lp);
 	lp = fsplit(sep, lp->next, TRUE);
 	RefReturn(lp);
 }
@@ -129,21 +129,21 @@ PRIM(fsplit) {
 	if (list == NULL)
 		fail("$&fsplit", "usage: %%fsplit separator [args ...]");
 	Ref(List *, lp, list);
-	sep = getstr(lp->term);
+	sep = getstr(lp);
 	lp = fsplit(sep, lp->next, FALSE);
 	RefReturn(lp);
 }
 
 PRIM(var) {
-	Term *term;
+	char *s;
 	if (list == NULL)
 		return NULL;
 	Ref(List *, rest, list->next);
-	Ref(char *, name, getstr(list->term));
+	Ref(char *, name, getstr(list));
 	Ref(List *, defn, varlookup(name, NULL));
 	rest = prim_var(rest, NULL, evalflags);
-	term = mkstr(str("%S = %#L", name, defn, " "));
-	list = mklist(term, rest);
+	s = str("%S = %#L", name, defn, " ");
+	list = mklist(s, NULL, rest);
 	RefEnd3(defn, name, rest);
 	return list;
 }
@@ -161,7 +161,7 @@ static void loginput(char *input) {
 		}
 writeit:
 	gcdisable();
-	Ref(List *, list, append(fn, mklist(mkstr(input), NULL)));
+	Ref(List *, list, append(fn, mklist(input, NULL, NULL)));
 	gcenable();
 	eval(list, NULL, 0);
 	RefEnd(list);
@@ -173,9 +173,9 @@ PRIM(parse) {
 	Ref(char *, prompt2, NULL);
 	Ref(List *, lp, list);
 	if (lp != NULL) {
-		prompt1 = getstr(lp->term);
+		prompt1 = getstr(lp);
 		if ((lp = lp->next) != NULL)
-			prompt2 = getstr(lp->term);
+			prompt2 = getstr(lp);
 	}
 	RefEnd(lp);
 	newhistbuffer();
@@ -193,8 +193,7 @@ PRIM(parse) {
 	loginput(dumphistbuffer());
 	result = (tree == NULL)
 		   ? NULL
-		   : mklist(mkterm(NULL, mkclosure(gcmk(nThunk, tree), NULL)),
-			    NULL);
+		   : mklist(NULL, mkclosure(gcmk(nThunk, tree), NULL), NULL);
 	RefEnd3(tree, prompt2, prompt1);
 	return result;
 }
@@ -229,7 +228,7 @@ PRIM(batchloop) {
 
 	CatchException (e)
 
-		if (!termeq(e->term, "eof"))
+		if (!termeq(e, "eof"))
 			throw(e);
 		RefEnd(dispatch);
 		if (result == ltrue)
@@ -250,8 +249,8 @@ PRIM(home) {
 		return varlookup("home", NULL);
 	if (list->next != NULL)
 		fail("$&home", "usage: %%home [user]");
-	pw = getpwnam(getstr(list->term));
-	return (pw == NULL) ? NULL : mklist(mkstr(gcdup(pw->pw_dir)), NULL);
+	pw = getpwnam(getstr(list));
+	return (pw == NULL) ? NULL : mklist(gcdup(pw->pw_dir), NULL, NULL);
 }
 
 PRIM(vars) {
@@ -273,9 +272,9 @@ PRIM(noreturn) {
 	if (list == NULL)
 		fail("$&noreturn", "usage: $&noreturn lambda args ...");
 	Ref(List *, lp, list);
-	Ref(Closure *, closure, getclosure(lp->term));
+	Ref(Closure *, closure, getclosure(lp));
 	if (closure == NULL || closure->tree->kind != nLambda)
-		fail("$&noreturn", "$&noreturn: %E is not a lambda", lp->term);
+		fail("$&noreturn", "$&noreturn: %1L is not a lambda", lp);
 	Ref(Tree *, tree, closure->tree);
 	Ref(Binding *, context, bindargs(tree->u[0].p, lp->next, closure->binding));
 	lp = walk(tree->u[1].p, context, evalflags);
@@ -293,7 +292,7 @@ PRIM(setmaxevaldepth) {
 	if (list->next != NULL)
 		fail("$&setmaxevaldepth", "usage: $&setmaxevaldepth [limit]");
 	Ref(List *, lp, list);
-	n = strtol(getstr(lp->term), &s, 0);
+	n = strtol(getstr(lp), &s, 0);
 	if (n < 0 || (s != NULL && *s != '\0'))
 		fail("$&setmaxevaldepth", "max-eval-depth must be set to a positive integer");
 	if (n < MINmaxevaldepth)
@@ -309,14 +308,14 @@ PRIM(sethistory) {
 		return NULL;
 	}
 	Ref(List *, lp, list);
-	sethistory(getstr(lp->term));
+	sethistory(getstr(lp));
 	RefReturn(lp);
 }
 
 PRIM(writehistory) {
 	if (list == NULL || list->next != NULL)
 		fail("$&writehistory", "usage: $&writehistory command");
-	loghistory(getstr(list->term));
+	loghistory(getstr(list));
 	return NULL;
 }
 
@@ -330,7 +329,7 @@ PRIM(setmaxhistorylength) {
 	if (list->next != NULL)
 		fail("$&setmaxhistorylength", "usage: $&setmaxhistorylength [limit]");
 	Ref(List *, lp, list);
-	n = (int)strtol(getstr(lp->term), &s, 0);
+	n = (int)strtol(getstr(lp), &s, 0);
 	if (n < 0 || (s != NULL && *s != '\0'))
 		fail("$&setmaxhistorylength", "max-history-length must be set to a positive integer");
 	setmaxhistorylength(n);
