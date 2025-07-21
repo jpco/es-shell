@@ -159,61 +159,6 @@ static int pipefork(int p[2], int *extra) {
 	return pid;
 }
 
-PRIM(here) {
-	int fd, doclen, p[2], status, ticket = UNREGISTERED;
-	volatile int pid = -1;
-	List *tail, **tailp;
-
-	caller = "$&here";
-	if (length(list) < 2)
-		argcount("%here fd [word ...] cmd");
-
-	fd = getnumber(getstr(list->term));
-	Ref(List *, lp, list->next);
-	for (tailp = &lp; (tail = *tailp)->next != NULL; tailp = &tail->next)
-		;
-	*tailp = NULL;
-
-	Ref(char *, doc, (lp == tail) ? NULL : str("%L", lp, ""));
-	doclen = strlen(doc);
-
-	Ref(List *, cmd, tail);
-#ifdef PIPE_BUF
-	if (doclen <= PIPE_BUF) {
-		if (pipe(p) == -1)
-			fail("$&here", "pipe: %s", esstrerror(errno));
-		ewrite(p[1], doc, doclen);
-	} else
-#endif
-	if ((pid = pipefork(p, NULL)) == 0) {	/* child that writes to pipe */
-		close(p[0]);
-		ewrite(p[1], doc, doclen);
-		esexit(0);
-	}
-
-	close(p[1]);
-	ticket = defer_mvfd(TRUE, p[0], fd);
-
-	ExceptionHandler
-		lp = eval(cmd, NULL, evalflags);
-	CatchException (e)
-		undefer(ticket);
-		close(p[0]);
-		if (pid > 0)
-			ewaitfor(pid);
-		throw(e);
-	EndExceptionHandler
-
-	undefer(ticket);
-	close(p[0]);
-	if (pid > 0) {
-		status = ewaitfor(pid);
-		printstatus(0, status);
-	}
-	RefEnd2(cmd, doc);
-	RefReturn(lp);
-}
-
 PRIM(pipe) {
 	int n, infd, inpipe;
 	static int *pids = NULL, pidmax = 0;
@@ -264,9 +209,7 @@ PRIM(pipe) {
 	Ref(List *, result, NULL);
 	do {
 		Term *t;
-		int status = ewaitfor(pids[--n]);
-		printstatus(0, status);
-		t = mkstr(mkstatus(status));
+		t = mkstr(str("%d", pids[--n]));
 		result = mklist(t, result);
 	} while (0 < n);
 	if (evalflags & eval_inchild)
@@ -274,138 +217,35 @@ PRIM(pipe) {
 	RefReturn(result);
 }
 
-#if HAVE_DEV_FD
-PRIM(readfrom) {
-	int pid, p[2], status;
-	Push push;
-
-	caller = "$&readfrom";
-	if (length(list) != 3)
-		argcount("%readfrom var input cmd");
-	Ref(List *, lp, list);
-	Ref(char *, var, getstr(lp->term));
-	lp = lp->next;
-	Ref(Term *, input, lp->term);
-	lp = lp->next;
-	Ref(Term *, cmd, lp->term);
-
+PRIM(readfork) {
+	int pid, p[2], fd;
 	if ((pid = pipefork(p, NULL)) == 0) {
 		close(p[0]);
 		mvfd(p[1], 1);
-		esexit(exitstatus(eval1(input, evalflags &~ eval_inchild)));
+		esexit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));
 	}
-
 	close(p[1]);
-	lp = mklist(mkstr(str(DEVFD_PATH, p[0])), NULL);
-	varpush(&push, var, lp);
+	fd = newfd();
+	mvfd(p[0], fd);
 
-	ExceptionHandler
-		lp = eval1(cmd, evalflags);
-	CatchException (e)
-		close(p[0]);
-		ewaitfor(pid);
-		throw(e);
-	EndExceptionHandler
-
-	close(p[0]);
-	status = ewaitfor(pid);
-	printstatus(0, status);
-	varpop(&push);
-	RefEnd3(cmd, input, var);
-	RefReturn(lp);
+	return mklist(mkstr(str("%d", pid)), mklist(mkstr(str("%d", fd)), NULL));
 }
 
-PRIM(writeto) {
-	int pid, p[2], status;
-	Push push;
-
-	caller = "$&writeto";
-	if (length(list) != 3)
-		argcount("%writeto var output cmd");
-	Ref(List *, lp, list);
-	Ref(char *, var, getstr(lp->term));
-	lp = lp->next;
-	Ref(Term *, output, lp->term);
-	lp = lp->next;
-	Ref(Term *, cmd, lp->term);
-
+PRIM(writefork) {
+	int pid, p[2], fd;
 	if ((pid = pipefork(p, NULL)) == 0) {
 		close(p[1]);
 		mvfd(p[0], 0);
-		esexit(exitstatus(eval1(output, evalflags &~ eval_inchild)));
+		esexit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));
 	}
-
 	close(p[0]);
-	lp = mklist(mkstr(str(DEVFD_PATH, p[1])), NULL);
-	varpush(&push, var, lp);
+	fd = newfd();
+	mvfd(p[1], fd);
 
-	ExceptionHandler
-		lp = eval1(cmd, evalflags);
-	CatchException (e)
-		close(p[1]);
-		ewaitfor(pid);
-		throw(e);
-	EndExceptionHandler
-
-	close(p[1]);
-	status = ewaitfor(pid);
-	printstatus(0, status);
-	varpop(&push);
-	RefEnd3(cmd, output, var);
-	RefReturn(lp);
+	return mklist(mkstr(str("%d", pid)), mklist(mkstr(str("%d", fd)), NULL));
 }
-#endif
 
 #define	BUFSIZE	4096
-
-static List *bqinput(const char *sep, int fd) {
-	long n;
-	char in[BUFSIZE];
-	startsplit(sep, TRUE);
-
-restart:
-	/* avoid SIGCHK()ing in here so we don't abandon our child process */
-	while ((n = eread(fd, in, sizeof in)) > 0)
-		splitstring(in, n, FALSE);
-	if (n == -1) {
-		if (errno == EINTR)
-			goto restart;
-		close(fd);
-		fail("$&backquote", "backquote read: %s", esstrerror(errno));
-	}
-	return endsplit();
-}
-
-PRIM(backquote) {
-	int pid, p[2], status;
-
-	caller = "$&backquote";
-	if (list == NULL)
-		fail(caller, "usage: backquote separator command [args ...]");
-
-	Ref(List *, lp, list);
-	Ref(char *, sep, getstr(lp->term));
-	lp = lp->next;
-
-	if ((pid = pipefork(p, NULL)) == 0) {
-		mvfd(p[1], 1);
-		close(p[0]);
-		esexit(exitstatus(eval(lp, NULL, evalflags | eval_inchild)));
-	}
-
-	close(p[1]);
-	gcdisable();
-	lp = bqinput(sep, p[0]);
-	close(p[0]);
-	status = ewaitfor(pid);
-	printstatus(0, status);
-	lp = mklist(mkstr(mkstatus(status)), lp);
-	gcenable();
-	list = lp;
-	RefEnd2(sep, lp);
-	SIGCHK();
-	return list;
-}
 
 PRIM(newfd) {
 	if (list != NULL)
@@ -457,13 +297,9 @@ extern Dict *initprims_io(Dict *primdict) {
 	X(close);
 	X(dup);
 	X(pipe);
-	X(backquote);
 	X(newfd);
-	X(here);
-#if HAVE_DEV_FD
-	X(readfrom);
-	X(writeto);
-#endif
+	X(readfork);
+	X(writefork);
 	X(read);
 	return primdict;
 }

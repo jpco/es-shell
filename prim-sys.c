@@ -35,29 +35,12 @@ PRIM(newpgrp) {
 	return ltrue;
 }
 
-PRIM(background) {
-	int pid = efork(TRUE, TRUE);
-	if (pid == 0) {
-#if JOB_PROTECT
-		/* job control safe version: put it in a new pgroup, if interactive. */
-		if (isinteractive())
-			setpgid(0, 0);
-#endif
-		mvfd(eopen("/dev/null", oOpen), 0);
-		esexit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));
-	}
-	return mklist(mkstr(str("%d", pid)), NULL);
-}
-
 PRIM(fork) {
-	int pid, status;
+	int pid;
 	pid = efork(TRUE, FALSE);
 	if (pid == 0)
 		esexit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));
-	status = ewaitfor(pid);
-	SIGCHK();
-	printstatus(0, status);
-	return mklist(mkstr(mkstatus(status)), NULL);
+	return mklist(mkstr(str("%d", pid)), NULL);
 }
 
 static Noreturn failexec(char *file, List *args) {
@@ -79,8 +62,8 @@ static Noreturn failexec(char *file, List *args) {
 }
 
 /* forkexec -- fork (if necessary) and exec */
-static List *forkexec(char *file, List *list, Boolean inchild) {
-	int pid, status;
+static int forkexec(char *file, List *list, Boolean inchild) {
+	int pid;
 	Vector *env;
 	gcdisable();
 	env = mkenv();
@@ -90,25 +73,19 @@ static List *forkexec(char *file, List *list, Boolean inchild) {
 		failexec(file, list);
 	}
 	gcenable();
-	status = ewaitfor(pid);
-	if ((status & 0xff) == 0) {
-		sigint_newline = FALSE;
-		SIGCHK();
-		sigint_newline = TRUE;
-	} else
-		SIGCHK();
-	printstatus(0, status);
-	return mklist(mkterm(mkstatus(status), NULL), NULL);
+	return pid;
 }
 
 PRIM(run) {
 	char *file;
+	int pid;
 	if (list == NULL)
 		fail("$&run", "usage: %%run file argv0 argv1 ...");
 	Ref(List *, lp, list);
 	file = getstr(lp->term);
-	lp = forkexec(file, lp->next, (evalflags & eval_inchild) != 0);
-	RefReturn(lp);
+	pid = forkexec(file, lp->next, (evalflags & eval_inchild) != 0);
+	RefEnd(lp);
+	return mklist(mkstr(str("%d", pid)), NULL);
 }
 
 PRIM(umask) {
@@ -329,103 +306,6 @@ PRIM(limit) {
 }
 #endif	/* BSD_LIMITS */
 
-#if BUILTIN_TIME
-#if HAVE_GETRUSAGE
-/* This function is provided as timersub(3) on some systems, but it's simple enough
- * to do ourselves. */
-static void timesub(struct timeval *a, struct timeval *b, struct timeval *res) {
-	res->tv_sec = a->tv_sec - b->tv_sec;
-	res->tv_usec = a->tv_usec - b->tv_usec;
-	if (res->tv_usec < 0) {
-		res->tv_sec -= 1;
-		res->tv_usec += 1000000;
-	}
-}
-#endif
-
-PRIM(time) {
-#if HAVE_GETRUSAGE
-
-	int pid, status;
-	time_t t0, t1;
-	struct rusage ru_prev, ru_new, ru_diff;
-
-	Ref(List *, lp, list);
-
-	getrusage(RUSAGE_CHILDREN, &ru_prev);
-	gc();	/* do a garbage collection first to ensure reproducible results */
-	t0 = time(NULL);
-	pid = efork(TRUE, FALSE);
-	if (pid == 0)
-		esexit(exitstatus(eval(lp, NULL, evalflags | eval_inchild)));
-	status = ewait(pid, FALSE);
-	t1 = time(NULL);
-	SIGCHK();
-	printstatus(0, status);
-
-	getrusage(RUSAGE_CHILDREN, &ru_new);
-	timesub(&ru_new.ru_utime, &ru_prev.ru_utime, &ru_diff.ru_utime);
-	timesub(&ru_new.ru_stime, &ru_prev.ru_stime, &ru_diff.ru_stime);
-
-	eprint(
-		"%6ldr %5ld.%ldu %5ld.%lds\t%L\n",
-		t1 - t0,
-		ru_diff.ru_utime.tv_sec, (long) (ru_diff.ru_utime.tv_usec / 100000),
-		ru_diff.ru_stime.tv_sec, (long) (ru_diff.ru_stime.tv_usec / 100000),
-		lp, " "
-	);
-
-	RefEnd(lp);
-	return mklist(mkstr(mkstatus(status)), NULL);
-
-#else	/* !HAVE_GETRUSAGE */
-
-	int pid, status;
-	Ref(List *, lp, list);
-
-	gc();	/* do a garbage collection first to ensure reproducible results */
-	pid = efork(TRUE, FALSE);
-	if (pid == 0) {
-		clock_t t0, t1;
-		struct tms tms;
-		static clock_t ticks = 0;
-
-		if (ticks == 0)
-			ticks = sysconf(_SC_CLK_TCK);
-
-		t0 = times(&tms);
-		pid = efork(TRUE, FALSE);
-		if (pid == 0)
-			esexit(exitstatus(eval(lp, NULL, evalflags | eval_inchild)));
-
-		status = ewaitfor(pid);
-		t1 = times(&tms);
-		SIGCHK();
-		printstatus(0, status);
-
-		tms.tms_cutime += ticks / 20;
-		tms.tms_cstime += ticks / 20;
-
-		eprint(
-			"%6ldr %5ld.%ldu %5ld.%lds\t%L\n",
-			(t1 - t0 + ticks / 2) / ticks,
-			tms.tms_cutime / ticks, ((tms.tms_cutime * 10) / ticks) % 10,
-			tms.tms_cstime / ticks, ((tms.tms_cstime * 10) / ticks) % 10,
-			lp, " "
-		);
-		esexit(status);
-	}
-	status = ewaitfor(pid);
-	SIGCHK();
-	printstatus(0, status);
-
-	RefEnd(lp);
-	return mklist(mkstr(mkstatus(status)), NULL);
-
-#endif	/* !HAVE_GETRUSAGE */
-}
-#endif	/* BUILTIN_TIME */
-
 #if !KERNEL_POUNDBANG
 PRIM(execfailure) {
 	int fd, len, argc;
@@ -492,7 +372,6 @@ PRIM(execfailure) {
 
 extern Dict *initprims_sys(Dict *primdict) {
 	X(newpgrp);
-	X(background);
 	X(umask);
 	X(cd);
 	X(fork);
@@ -502,7 +381,6 @@ extern Dict *initprims_sys(Dict *primdict) {
 	X(limit);
 #endif
 #if BUILTIN_TIME
-	X(time);
 #endif
 #if !KERNEL_POUNDBANG
 	X(execfailure);

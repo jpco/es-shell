@@ -133,7 +133,7 @@ static Proc *reap(int pid) {
 }
 
 /* ewait -- wait for a specific process to die, or any process if pid == -1 */
-extern int ewait(int pidarg, Boolean interruptible) {
+static int ewait(int pidarg, Boolean interruptible) {
 	int deadpid, status;
 	Proc *proc;
 	while ((deadpid = waitpid(pidarg, &status, 0)) == -1) {

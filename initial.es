@@ -70,7 +70,6 @@ fn-catch	= $&catch
 fn-echo		= $&echo
 fn-exec		= $&exec
 fn-forever	= $&forever
-fn-fork		= $&fork
 fn-if		= $&if
 fn-newpgrp	= $&newpgrp
 fn-result	= $&result
@@ -144,7 +143,6 @@ if {~ <=$&primitives time}  {fn-time  = $&time}
 fn-%apids	= $&apids
 fn-%fsplit      = $&fsplit
 fn-%newfd	= $&newfd
-fn-%run         = $&run
 fn-%split       = $&split
 fn-%var		= $&var
 fn-%whatis	= $&whatis
@@ -321,10 +319,15 @@ fn-%flatten	= $&flatten
 #	as the first value of its result list.  The default %backquote
 #	puts that value in $bqstatus.
 
-fn %backquote {
-	let ((status output) = <={ $&backquote $* }) {
-		bqstatus = $status
-		result $output
+fn %backquote ifs cmd {
+	let (status = (); output = (); (pid fd) = <={$&readfork $cmd}) {
+		# TODO: %read better
+		let (line = ())
+		%dup 0 $fd {while {!~ <={line = <=%read} ()} {
+			output = $output $line \n
+		}}
+		bqstatus = <={wait $pid}
+		result <={%split $ifs <={%flatten '' $output}}
 	}
 }
 
@@ -385,12 +388,26 @@ fn-%or = $&noreturn @ first rest {
 #		cmd &			%background {cmd}
 
 fn %background cmd {
-	let (pid = <={$&background $cmd}) {
+	let (pid = <={$&fork {
+		if %is-interactive {
+			newpgrp
+		}
+		exec {< /dev/null}
+		$cmd
+	}}) {
 		apid = $pid
-		if {%is-interactive} {
+		if %is-interactive {
 			echo >[1=2] $pid
 		}
 	}
+}
+
+fn fork {
+	wait <={$&fork $*}
+}
+
+fn %run {
+	wait <={$&run $*}
 }
 
 #	These redirections are rewritten:
@@ -439,7 +456,14 @@ fn %one {
 #		cmd << tag input tag	%here 0 input {cmd}
 #		cmd <<< string		%here 0 string {cmd}
 
-fn-%here	= $&here
+fn-%here = $&noreturn @ fd input cmd {
+	let ((pid pf) = <={$&readfork {echo -n $input}}) {
+		let (result = <={%dup $fd $pf $cmd}) {
+			wait $pid
+			result $result
+		}
+	}
+}
 
 #	These operations are like redirections, except they don't include
 #	explicitly named files.  They do not reduce to the %openfile hook.
@@ -451,7 +475,14 @@ fn-%here	= $&here
 
 fn-%close	= $&close
 fn-%dup		= $&dup
-fn-%pipe	= $&pipe
+
+fn %pipe {
+	let (result = ()) {
+		for (pids = <={$&pipe $*})
+			result = $result <={wait $pids}
+		result $result
+	}
+}
 
 #	Input/Output substitution (i.e., the >{} and <{} forms) provide an
 #	interesting case.  If es is compiled for use with /dev/fd, these
@@ -493,34 +524,22 @@ fn-%pipe	= $&pipe
 #		cmd <{input}		%readfrom var {input} {cmd $var}
 #		cmd >{output}		%writeto var {output} {cmd $var}
 
-if {~ <=$&primitives readfrom} {
-	fn-%readfrom = $&readfrom
-} {
-	fn-%readfrom = $&noreturn @ var input cmd {
-		local ($var = /tmp/es.$var.$pid) {
-			unwind-protect {
-				$input > $$var
-				# text of $cmd is   command file
-				$cmd
-			} {
-				rm -f $$var
-			}
+fn-%readfrom = $&noreturn @ var input cmd {
+	let ((pid fd) = <={$&readfork $input}) {
+		$var = /dev/fd/$fd
+		let (result = <={$cmd}) {
+			wait $pid
+			result $result
 		}
 	}
 }
 
-if {~ <=$&primitives writeto} {
-	fn-%writeto = $&writeto
-} {
-	fn-%writeto = $&noreturn @ var output cmd {
-		local ($var = /tmp/es.$var.$pid) {
-			unwind-protect {
-				> $$var
-				$cmd
-				$output < $$var
-			} {
-				rm -f $$var
-			}
+fn-%readfrom = $&noreturn @ var output cmd {
+	let ((pid fd) = <={$&writefork $output}) {
+		$var = /dev/fd/$fd
+		let (result = <={$cmd}) {
+			wait $pid
+			result $result
 		}
 	}
 }
