@@ -269,7 +269,7 @@ extern void resetparser(void) {
 }
 
 /* runinput -- run from an input source */
-extern List *runinput(Input *in, int runflags) {
+static List *runinput(Input *in, int runflags, Binding *binding) {
 	volatile int flags = runflags;
 	List * volatile result = NULL;
 	List *repl, *dispatch;
@@ -289,10 +289,11 @@ extern List *runinput(Input *in, int runflags) {
 
 	ExceptionHandler
 
+		Ref(Binding *, bp, binding);
 		dispatch
 	          = varlookup(dispatcher[((flags & run_printcmds) ? 1 : 0)
 					 + ((flags & run_noexec) ? 2 : 0)],
-			      NULL);
+			      bp);
 		if (flags & eval_exitonfalse) {
 			dispatch = mklist(mkstr("%exit-on-false"), dispatch);
 			flags &= ~eval_exitonfalse;
@@ -302,12 +303,13 @@ extern List *runinput(Input *in, int runflags) {
 		repl = varlookup((flags & run_interactive)
 				   ? "fn-%interactive-loop"
 				   : "fn-%batch-loop",
-				 NULL);
+				 bp);
 		result = (repl == NULL)
-				? prim("batchloop", NULL, NULL, flags)
+				? prim("batchloop", NULL, bp, flags)
 				: eval(repl, NULL, flags);
 
 		varpop(&push);
+		RefEnd(bp);
 
 	CatchException (e)
 
@@ -336,9 +338,10 @@ static void fdcleanup(Input *in) {
 }
 
 /* runfd -- run commands from a file descriptor */
-extern List *runfd(int fd, const char *name, int flags) {
+extern List *runfd(int fd, const char *name, int flags, Binding *binding) {
 	Input in;
 	List *result;
+	Ref(Binding *, bp, binding);
 
 	memzero(&in, sizeof (Input));
 	in.lineno = 1;
@@ -352,8 +355,9 @@ extern List *runfd(int fd, const char *name, int flags) {
 	in.name = (name == NULL) ? str("fd %d", fd) : name;
 
 	RefAdd(in.name);
-	result = runinput(&in, flags);
+	result = runinput(&in, flags, bp);
 	RefRemove(in.name);
+	RefEnd(bp);
 
 	return result;
 }
@@ -370,7 +374,7 @@ static int stringfill(Input *in) {
 }
 
 /* runstring -- run commands from a string */
-extern List *runstring(const char *str, const char *name, int flags) {
+extern List *runstring(const char *str, const char *name, int flags, Binding *binding) {
 	Input in;
 	List *result;
 	unsigned char *buf;
@@ -390,7 +394,7 @@ extern List *runstring(const char *str, const char *name, int flags) {
 	in.cleanup = stringcleanup;
 
 	RefAdd(in.name);
-	result = runinput(&in, flags);
+	result = runinput(&in, flags, binding);
 	RefRemove(in.name);
 	return result;
 }

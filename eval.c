@@ -4,10 +4,12 @@
 
 unsigned long evaldepth = 0, maxevaldepth = MAXmaxevaldepth;
 
-static Noreturn failexec(char *file, List *args) {
+Boolean keeplexicalcontext = FALSE;
+
+static Noreturn failexec(char *file, List *args, Binding *binding) {
 	List *fn;
 	assert(gcisblocked());
-	fn = varlookup("fn-%exec-failure", NULL);
+	fn = varlookup("fn-%exec-failure", binding);
 	if (fn != NULL) {
 		int olderror = errno;
 		Ref(List *, list, append(fn, mklist(mkstr(file), args)));
@@ -23,7 +25,7 @@ static Noreturn failexec(char *file, List *args) {
 }
 
 /* forkexec -- fork (if necessary) and exec */
-extern List *forkexec(char *file, List *list, Boolean inchild) {
+extern List *forkexec(char *file, List *list, Binding *binding, Boolean inchild) {
 	int pid, status;
 	Vector *env;
 	gcdisable();
@@ -31,7 +33,7 @@ extern List *forkexec(char *file, List *list, Boolean inchild) {
 	pid = efork(!inchild, FALSE);
 	if (pid == 0) {
 		execve(file, vectorize(list)->vector, env->vector);
-		failexec(file, list);
+		failexec(file, list, binding);
 	}
 	gcenable();
 	status = ewaitfor(pid);
@@ -346,10 +348,10 @@ extern Binding *bindargs(Tree *params, List *args, Binding *binding) {
 }
 
 /* pathsearch -- evaluate fn %pathsearch + some argument */
-extern List *pathsearch(Term *term) {
+extern List *pathsearch(Term *term, Binding *binding) {
 	List *list;
 	Ref(List *, search, NULL);
-	search = varlookup("fn-%pathsearch", NULL);
+	search = varlookup("fn-%pathsearch", binding);
 	if (search == NULL)
 		fail("es:pathsearch", "%E: fn %%pathsearch undefined", term);
 	list = mklist(term, NULL);
@@ -401,11 +403,18 @@ restart:
 						    mklist(mkterm(funcname,
 								  NULL),
 							   NULL));
+				if (keeplexicalcontext) {
+					Binding *cp = context;
+					for (; cp->next; cp = cp->next)
+						;
+					cp->next = binding;
+					keeplexicalcontext = FALSE;
+				}
 				list = walk(tree->u[1].p, context, flags);
 				if (funcname != NULL)
 					varpop(&p);
 				RefEnd2(context, tree);
-	
+
 			CatchException (e)
 
 				if (termeq(e->term, "return")) {
@@ -456,17 +465,17 @@ restart:
 			Term *fn = mkstr(funcname);
 			list = mklist(fn, list->next);
 		}
-		list = forkexec(name, list, flags & eval_inchild);
+		list = forkexec(name, list, binding, flags & eval_inchild);
 		RefPop(name);
 		goto done;
 	}
 	RefEnd(name);
 
-	fn = pathsearch(list->term);
+	fn = pathsearch(list->term, binding);
 	if (fn != NULL && fn->next == NULL
 	    && (cp = getclosure(fn->term)) == NULL) {
 		char *name = getstr(fn->term);
-		list = forkexec(name, list, flags & eval_inchild);
+		list = forkexec(name, list, binding, flags & eval_inchild);
 		goto done;
 	}
 

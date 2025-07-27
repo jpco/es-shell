@@ -153,9 +153,9 @@ fn-%whatis	= $&whatis
 #	users don't have to type the infamous <= (nee <>) operator.
 #	Whatis also protects the used from exceptions raised by %whatis.
 
-fn var		{ for (i = $*) echo <={%var $i} }
+fn-var = $&keeplexicalcontext @ { for (i = $*) echo <={%var $i} }
 
-fn whatis {
+fn-whatis = $&keeplexicalcontext @ {
 	let (result = ) {
 		for (i = $*) {
 			catch @ e from message {

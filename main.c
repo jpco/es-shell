@@ -52,7 +52,7 @@ static void runesrc(void) {
 	int fd = eopen(esrc, oOpen);
 	if (fd != -1) {
 		ExceptionHandler
-			runfd(fd, esrc, 0);
+			runfd(fd, esrc, 0, NULL);
 		CatchException (e)
 			if (termeq(e->term, "exit"))
 				exit(exitstatus(e->next));
@@ -208,16 +208,16 @@ getopt_done:
 			}
 			vardef("*", NULL, argp);
 			vardef("0", NULL, mklist(mkstr(file), NULL));
-			status = exitstatus(runfd(fd, file, runflags));
+			status = exitstatus(runfd(fd, file, runflags, NULL));
 			goto return_main;
 		}
 
 		vardef("*", NULL, argp);
 		vardef("0", NULL, mklist(mkstr(argv[0]), NULL));
 		if (cmd != NULL)
-			status = exitstatus(runstring(cmd, NULL, runflags));
+			status = exitstatus(runstring(cmd, NULL, runflags, NULL));
 		else
-			status = exitstatus(runfd(0, "stdin", runflags));
+			status = exitstatus(runfd(0, "stdin", runflags, NULL));
 
 	CatchException (e)
 

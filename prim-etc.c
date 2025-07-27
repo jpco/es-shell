@@ -58,6 +58,7 @@ PRIM(dot) {
 
 	Ref(List *, result, NULL);
 	Ref(List *, lp, esoptend());
+	Ref(Binding *, bp, binding);
 	if (lp == NULL)
 		fail("$&dot", "usage: %s", usage);
 
@@ -70,11 +71,11 @@ PRIM(dot) {
 	varpush(&star, "*", lp);
 	varpush(&zero, "0", mklist(mkstr(file), NULL));
 
-	result = runfd(fd, file, runflags);
+	result = runfd(fd, file, runflags, bp);
 
 	varpop(&zero);
 	varpop(&star);
-	RefEnd2(file, lp);
+	RefEnd3(file, bp, lp);
 	RefReturn(result);
 }
 
@@ -106,7 +107,7 @@ PRIM(whatis) {
 				if (error != NULL)
 					fail("$&whatis", "%s: %s", prog, error);
 			} else
-				list = pathsearch(term);
+				list = pathsearch(term, binding);
 		}
 		RefEnd(prog);
 	}
@@ -139,18 +140,19 @@ PRIM(var) {
 	if (list == NULL)
 		return NULL;
 	Ref(List *, rest, list->next);
+	Ref(Binding *, bp, binding);
 	Ref(char *, name, getstr(list->term));
-	Ref(List *, defn, varlookup(name, NULL));
+	Ref(List *, defn, varlookup(name, bp));
 	rest = prim_var(rest, NULL, evalflags);
 	term = mkstr(str("%S = %#L", name, defn, " "));
 	list = mklist(term, rest);
-	RefEnd3(defn, name, rest);
+	RefEnd4(defn, name, bp, rest);
 	return list;
 }
 
-static void loginput(char *input) {
+static void loginput(char *input, Binding *binding) {
 	char *c;
-	List *fn = varlookup("fn-%write-history", NULL);
+	List *fn = varlookup("fn-%write-history", binding);
 	if (!isinteractive() || !isfromfd() || fn == NULL)
 		return;
 	for (c = input;; c++)
@@ -169,8 +171,10 @@ writeit:
 
 PRIM(parse) {
 	List *result;
+	char *b;
 	Ref(char *, prompt1, NULL);
 	Ref(char *, prompt2, NULL);
+	Ref(Binding *, bp, binding);
 	Ref(List *, lp, list);
 	if (lp != NULL) {
 		prompt1 = getstr(lp->term);
@@ -185,17 +189,19 @@ PRIM(parse) {
 		tree = parse(prompt1, prompt2);
 	CatchException (ex)
 		Ref(List *, e, ex);
-		loginput(dumphistbuffer());
+		b = dumphistbuffer();
+		loginput(b, bp);
 		throw(e);
 		RefEnd(e);
 	EndExceptionHandler
 
-	loginput(dumphistbuffer());
+	b = dumphistbuffer();
+	loginput(b, bp);
 	result = (tree == NULL)
 		   ? NULL
 		   : mklist(mkterm(NULL, mkclosure(gcmk(nThunk, tree), NULL)),
 			    NULL);
-	RefEnd3(tree, prompt2, prompt1);
+	RefEnd4(tree, bp, prompt2, prompt1);
 	return result;
 }
 
@@ -247,7 +253,7 @@ PRIM(collect) {
 PRIM(home) {
 	struct passwd *pw;
 	if (list == NULL)
-		return varlookup("home", NULL);
+		return varlookup("home", binding);
 	if (list->next != NULL)
 		fail("$&home", "usage: %%home [user]");
 	pw = getpwnam(getstr(list->term));
@@ -281,6 +287,12 @@ PRIM(noreturn) {
 	lp = walk(tree->u[1].p, context, evalflags);
 	RefEnd3(context, tree, closure);
 	RefReturn(lp);
+}
+
+/* TODO: make this and noreturn look more similar to each other */
+PRIM(keeplexicalcontext) {
+	keeplexicalcontext = TRUE;
+	return eval(list, binding, evalflags);
 }
 
 PRIM(setmaxevaldepth) {
@@ -370,6 +382,7 @@ extern Dict *initprims_etc(Dict *primdict) {
 	X(isinteractive);
 	X(exitonfalse);
 	X(noreturn);
+	X(keeplexicalcontext);
 	X(setmaxevaldepth);
 #if HAVE_READLINE
 	X(sethistory);

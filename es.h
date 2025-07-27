@@ -150,15 +150,17 @@ extern Binding *reversebindings(Binding *binding);
 /* eval.c */
 
 extern Binding *bindargs(Tree *params, List *args, Binding *binding);
-extern List *forkexec(char *file, List *list, Boolean inchild);
+extern List *forkexec(char *file, List *list, Binding *binding, Boolean inchild);
 extern List *walk(Tree *tree, Binding *binding, int flags);
 extern List *eval(List *list, Binding *binding, int flags);
 extern List *eval1(Term *term, int flags);
-extern List *pathsearch(Term *term);
+extern List *pathsearch(Term *term, Binding *binding);
 
 extern unsigned long evaldepth, maxevaldepth;
 #define	MINmaxevaldepth		100
 #define	MAXmaxevaldepth		0xffffffffU
+
+extern Boolean keeplexicalcontext;
 
 #define	eval_inchild		1
 #define	eval_exitonfalse	2
@@ -174,7 +176,7 @@ extern List *glom2(Tree *tree, Binding *binding, StrList **quotep);
 /* glob.c */
 
 extern char QUOTED[], UNQUOTED[];
-extern List *glob(List *list, StrList *quote);
+extern List *glob(List *list, StrList *quote, Binding *binding);
 extern Boolean haswild(const char *pattern, const char *quoting);
 
 
@@ -297,8 +299,8 @@ extern Boolean isfromfd(void);
 extern void initinput(void);
 extern void resetparser(void);
 
-extern List *runfd(int fd, const char *name, int flags);
-extern List *runstring(const char *str, const char *name, int flags);
+extern List *runfd(int fd, const char *name, int flags, Binding *binding);
+extern List *runstring(const char *str, const char *name, int flags, Binding *binding);
 
 /* eval_* flags are also understood as runflags */
 #define	run_interactive		 4	/* -i or $0[0] = '-' */
