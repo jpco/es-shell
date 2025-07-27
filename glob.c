@@ -212,12 +212,15 @@ static char *expandhome(char *s, StrList *qp, Binding *binding) {
 	Ref(char *, string, s);
 	Ref(StrList *, quote, qp);
 	Ref(List *, list, NULL);
+	Ref(Binding *, bp, binding);
 	RefAdd(fn);
 	if (slash > 1)
 		list = mklist(mkstr(gcndup(s + 1, slash - 1)), NULL);
 	RefRemove(fn);
 
-	list = eval(append(fn, list), NULL, 0);
+	fn = append(fn, list);
+	list = eval(fn, bp, 0);
+	RefEnd(bp);
 
 	if (list != NULL) {
 		if (list->next != NULL)
@@ -259,10 +262,11 @@ static char *expandhome(char *s, StrList *qp, Binding *binding) {
 }
 
 /* glob -- globbing prepass (glob if we need to, and dispatch for tilde expansion) */
-extern List *glob(List *list, StrList *quote, Binding *binding) {
+extern List *glob(List *list, StrList *quote, Binding *binding0) {
 	List *lp;
 	StrList *qp;
 	Boolean doglobbing = FALSE;
+	Ref(Binding *, binding, binding0);
 
 	for (lp = list, qp = quote; lp != NULL; lp = lp->next, qp = qp->next)
 		if (qp->str != QUOTED) {
@@ -289,6 +293,7 @@ extern List *glob(List *list, StrList *quote, Binding *binding) {
 				doglobbing = TRUE;
 			RefEnd(str);
 		}
+	RefEnd(binding);
 
 	if (!doglobbing)
 		return list;

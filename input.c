@@ -306,7 +306,7 @@ static List *runinput(Input *in, int runflags, Binding *binding) {
 				 bp);
 		result = (repl == NULL)
 				? prim("batchloop", NULL, bp, flags)
-				: eval(repl, NULL, flags);
+				: eval(repl, bp, flags);
 
 		varpop(&push);
 		RefEnd(bp);

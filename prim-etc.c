@@ -164,9 +164,10 @@ static void loginput(char *input, Binding *binding) {
 writeit:
 	gcdisable();
 	Ref(List *, list, append(fn, mklist(mkstr(input), NULL)));
+	Ref(Binding *, bp, binding);
 	gcenable();
-	eval(list, NULL, 0);
-	RefEnd(list);
+	eval(list, bp, 0);
+	RefEnd2(bp, list);
 }
 
 PRIM(parse) {

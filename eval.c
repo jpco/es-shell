@@ -16,7 +16,7 @@ static Noreturn failexec(char *file, List *args, Binding *binding) {
 		RefAdd(file);
 		gcenable();
 		RefRemove(file);
-		eval(list, NULL, 0);
+		eval(list, binding, 0);
 		RefEnd(list);
 		errno = olderror;
 	}
@@ -348,8 +348,9 @@ extern Binding *bindargs(Tree *params, List *args, Binding *binding) {
 }
 
 /* pathsearch -- evaluate fn %pathsearch + some argument */
-extern List *pathsearch(Term *term, Binding *binding) {
+extern List *pathsearch(Term *term, Binding *binding0) {
 	List *list;
+	Ref(Binding *, binding, binding0);
 	Ref(List *, search, NULL);
 	search = varlookup("fn-%pathsearch", binding);
 	if (search == NULL)
@@ -357,7 +358,9 @@ extern List *pathsearch(Term *term, Binding *binding) {
 	list = mklist(term, NULL);
 	list = append(search, list);
 	RefEnd(search);
-	return eval(list, NULL, 0);
+	list = eval(list, binding, 0);
+	RefEnd(binding);
+	return list;
 }
 
 /* eval -- evaluate a list, producing a list */
