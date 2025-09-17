@@ -50,7 +50,7 @@ extern Vector *vectorize(List *list) {
 
 /* qstrcmp -- a strcmp wrapper for qsort */
 extern int qstrcmp(const void *s1, const void *s2) {
-	return strcmp(*(const char **)s1, *(const char **)s2);
+	return strcoll(*(const char **)s1, *(const char **)s2);
 }
 
 /* sortvector */

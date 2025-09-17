@@ -325,6 +325,13 @@ extern void addhistbuffer(char c);
 extern char *dumphistbuffer(void);
 
 
+/* locale.c */
+
+extern List *setlocalelang(List *);
+extern List *setlocalecategory(char *, List *);
+extern void initlocale(void);
+
+
 /* opt.c */
 
 extern void esoptbegin(List *list, const char *caller, const char *usage, Boolean throws);

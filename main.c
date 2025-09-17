@@ -184,6 +184,7 @@ getopt_done:
 #endif
 		initprims();
 		initvars();
+		initlocale();
 
 		runinitial();
 

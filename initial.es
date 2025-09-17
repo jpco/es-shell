@@ -756,6 +756,25 @@ if {~ <=$&primitives setmaxhistorylength} {
 	max-history-length = 5000
 }
 
+#	The $&setlocale primitive ensures that es' internal idea of the locale
+#	matches the user's.  Different systems support different categories,
+#	so we perform a test here to see which settor functions to define.
+
+set-LANG = @ {$&setlocale LANG $*; result $*}
+
+let (fn can-set-locale {catch @ {false} {$&setlocale $*; true}})
+for (category = (
+	LC_ALL LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME
+	LC_ADDRESS LC_IDENTIFICATION LC_MEASUREMENT LC_NAME LC_NUMERIC LC_PAPER
+	LC_TELEPHONE
+)) {
+	if {can-set-locale $category} {
+		set-$category = $&setlocale $category
+	} {
+		echo can''''t set $category
+	}
+}
+
 
 #
 # Variables

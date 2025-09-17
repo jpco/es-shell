@@ -302,6 +302,16 @@ PRIM(setmaxevaldepth) {
 	RefReturn(lp);
 }
 
+PRIM(setlocale) {
+	if (list == NULL)
+		fail("$&setlocale", "usage: $&setlocale category value");
+
+	if (termeq(list->term, "LANG"))
+		return setlocalelang(list->next);
+
+	return setlocalecategory(getstr(list->term), list->next);
+}
+
 #if HAVE_READLINE
 PRIM(sethistory) {
 	if (list == NULL) {
@@ -371,6 +381,7 @@ extern Dict *initprims_etc(Dict *primdict) {
 	X(exitonfalse);
 	X(noreturn);
 	X(setmaxevaldepth);
+	X(setlocale);
 #if HAVE_READLINE
 	X(sethistory);
 	X(writehistory);
