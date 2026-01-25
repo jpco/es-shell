@@ -17,6 +17,30 @@ static int getnumber(const char *s) {
 	return result;
 }
 
+/*
+ * The openfile, dup, and close primitives work via the redir() function.
+ * This function takes three arguments: rop, list, and evalflags.
+ *  - rop is a function which performs some kind of file-related action
+ *  - list is a List containing inputs for rop(), including a command to run
+ *  - evalflags is evalflags - critically, eval_inchild is used for deferring
+ *
+ * What redir() does is:
+ *  - pop the first term from list and save it as an int in destfd
+ *  - call rop() on the list, which sets srcfd and returns a new list
+ *  - performs a close on destfd, OR calls dup2(srcfd, destfd) (with deferring)
+ *  - eval()s the list
+ *  - undefers
+ *  - returns the result or throws the exception from the eval() call
+ *
+ * The rop() functions:
+ *  - take a list containing information required for performing its file
+ *    action, plus a command. this is fairly free-form, as different redirs have
+ *    different inputs (e.g., file and mode for openfile but input fd for dup)
+ *  - generate a realfd (srcfd) which can be "assigned" to the userfd (destfd)
+ *  - return an eval()able command - probably the input list with some number of
+ *    terms popped from the front
+ */
+
 static List *redir(List *(*rop)(int *fd, List *list), List *list, int evalflags) {
 	int destfd, srcfd;
 	volatile int inparent = (evalflags & eval_inchild) == 0;
@@ -130,7 +154,20 @@ PRIM(close) {
 	return redir(redir_close, list, evalflags);
 }
 
-/* pipefork -- create a pipe and fork */
+
+/*
+ * The other IO-related primitives (here, pipe, readfrom, writeto, backquote)
+ * work via the pipefork() function.  This function performs a pipe(3) call on
+ * its parameter p, and then performs a fork(3) and returns its output.
+ *
+ * The primary function of pipefork() is merely to abstract away some of the
+ * noisy details around fd handling.
+ *
+ * CatchExceptionIf() exists to be used in this function: after forking, the
+ * exception handler chain is discarded, so a normal CatchException would cause
+ * an assertion failure.
+ */
+
 static int pipefork(int p[2], int *extra) {
 	volatile int pid = 0;
 
@@ -406,6 +443,18 @@ PRIM(backquote) {
 	SIGCHK();
 	return list;
 }
+
+
+/*
+ * These two primitives are just self-contained utilities.
+ * $&newfd is a symptom of weak file handling and ideally should be removed.
+ *
+ * Arguably, $&read should probably be co-located with $&echo.
+ * It is also worth considering why $&read and $&echo look so different from
+ * one another: $&echo makes use of a lot of machinery also used elsewhere in
+ * the shell, but doesn't the shell also read input outside of this one
+ * primitive?
+ */
 
 PRIM(newfd) {
 	if (list != NULL)
