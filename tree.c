@@ -14,7 +14,7 @@ static Tree *gmk(void *(*alloc)(size_t, Tag *), NodeKind t, va_list ap) {
 	switch (t) {
 	    default:
 		panic("mk: bad node kind %d", t);
-	    case nWord: case nQword: case nPrim:
+	    case nWord: case nQword: case nPrim: case nHandle:
 		n = alloc(offsetof(Tree, u[1]), &Tree1Tag);
 		n->u[0].s = va_arg(ap, char *);
 		break;
@@ -89,13 +89,13 @@ static size_t Tree1Scan(void *p) {
 	switch (n->kind) {
 	    default:
 		panic("Tree1Scan: bad node kind %d", n->kind);
-	    case nPrim: case nWord: case nQword:
+	    case nPrim: case nWord: case nQword: case nHandle:
 		n->u[0].s = forward(n->u[0].s);
 		break;
 	    case nCall: case nThunk: case nVar:
 		n->u[0].p = forward(n->u[0].p);
 		break;
-	} 
+	}
 	return offsetof(Tree, u[1]);
 }
 
@@ -110,6 +110,6 @@ static size_t Tree2Scan(void *p) {
 		break;
 	    default:
 		panic("Tree2Scan: bad node kind %d", n->kind);
-	} 
+	}
 	return offsetof(Tree, u[2]);
 }

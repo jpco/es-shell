@@ -17,6 +17,62 @@ static int getnumber(const char *s) {
 	return result;
 }
 
+static Noreturn argcount(const char *s) {
+	fail(caller, "argument count: usage: %s", s);
+}
+
+/*
+ * $&handlefile opens a file and attaches it to a handle, which may be part of a
+ * list and bound to a variable.  In order to actually use it, it must be
+ * "applied" to an fd using the dup primitive.
+ */
+
+#include "term.h"
+
+typedef struct Filehandle Filehandle;
+struct Filehandle {
+	int fd, refs;
+	Filehandle *prev, *next;
+};
+
+Filehandle *handles = NULL;
+
+/* forward declare redir_openfile */
+static List *redir_openfile(int *, Boolean *, List *);
+
+/* handlefile mode name */
+PRIM(handlefile) {
+	int fd;
+	Filehandle *h;
+	caller = "$&handlefile";
+	if (length(list) != 2)
+		argcount("%handlefile mode file");
+
+	/* open file */
+	list = redir_openfile(&fd, NULL, list);
+	assert(list == NULL && fd != -1);
+
+	/* create and link filehandle */
+	h = ealloc(sizeof(Filehandle));
+	h->fd = fd;
+	h->refs = 1;
+	h->prev = NULL;
+	h->next = handles;
+	if (handles != NULL)
+		handles->prev = h;
+	handles = h;
+
+	/* return filehandle */
+	Ref(List *, result, NULL);
+	gcdisable();
+	result = mklist(mkterm(NULL,
+				mkclosure(gcmk(nHandle, (char *)h), NULL)),
+			NULL);
+	gcenable();
+	RefReturn(result);
+}
+
+
 /*
  * The openfile, dup, and close primitives work via the redir() function.
  * This function takes three arguments: rop, list, and evalflags.
@@ -41,35 +97,34 @@ static int getnumber(const char *s) {
  *    terms popped from the front
  */
 
-static List *redir(List *(*rop)(int *fd, List *list), List *list, int evalflags) {
+static List *redir(List *(*rop)(int *fd, Boolean *ud, List *list), List *list, int evalflags) {
 	int destfd, srcfd;
+	Boolean ud = TRUE;
 	volatile int inparent = (evalflags & eval_inchild) == 0;
 	volatile int ticket = UNREGISTERED;
 
 	assert(list != NULL);
 	Ref(List *, lp, list);
 	destfd = getnumber(getstr(lp->term));
-	lp = (*rop)(&srcfd, lp->next);
+	lp = (*rop)(&srcfd, &ud, lp->next);
 
 	ticket = (srcfd == -1)
 		   ? defer_close(inparent, destfd)
 		   : defer_mvfd(inparent, srcfd, destfd);
 	ExceptionHandler
 		lp = eval(lp, NULL, evalflags);
-		undefer(ticket);
+		if (ud)
+			undefer(ticket);
 	CatchException (e)
-		undefer(ticket);
+		if (ud)
+			undefer(ticket);
 		throw(e);
 	EndExceptionHandler
 
 	RefReturn(lp);
 }
 
-#define	REDIR(name)	static List *CONCAT(redir_,name)(int *srcfdp, List *list)
-
-static Noreturn argcount(const char *s) {
-	fail(caller, "argument count: usage: %s", s);
-}
+#define	REDIR(name)	static List *CONCAT(redir_,name)(int *srcfdp, Boolean UNUSED *ud, List *list)
 
 REDIR(openfile) {
 	int i, fd;
@@ -88,7 +143,7 @@ REDIR(openfile) {
 		{ NULL, 0 }
 	};
 
-	assert(length(list) == 3);
+	/* assert(length(list) == 3); */
 	Ref(List *, lp, list);
 
 	mode = getstr(lp->term);
@@ -127,7 +182,16 @@ REDIR(dup) {
 	int fd;
 	assert(length(list) == 2);
 	Ref(List *, lp, list);
-	fd = dup(fdmap(getnumber(getstr(lp->term))));
+
+	if (lp->term->closure != NULL
+			&& lp->term->closure->tree->kind == nHandle) {
+		Filehandle *h = (Filehandle *)(lp->term->closure->tree->u[0].s);
+		fd = h->fd;
+		*ud = FALSE;
+	} else {
+		fd = dup(fdmap(getnumber(getstr(lp->term))));
+	}
+
 	if (fd == -1)
 		fail("$&dup", "dup: %s", esstrerror(errno));
 	*srcfdp = fd;
@@ -160,7 +224,7 @@ PRIM(close) {
  * work via the pipefork() function.  This function performs a pipe(3) call on
  * its parameter p, and then performs a fork(3) and returns its output.
  *
- * The primary function of pipefork() is merely to abstract away some of the
+ * The primary purpose of pipefork() is merely to abstract away some of the
  * noisy details around fd handling.
  *
  * CatchExceptionIf() exists to be used in this function: after forking, the
@@ -505,6 +569,7 @@ extern Dict *initprims_io(Dict *primdict) {
 	X(openfile);
 	X(close);
 	X(dup);
+	X(handlefile);
 	X(pipe);
 	X(backquote);
 	X(newfd);

@@ -174,6 +174,7 @@ static List *glom1(Tree *tree, Binding *binding) {
 			list = mklist(mkterm(NULL, mkclosure(tp, bp)), NULL);
 			tp = NULL;
 			break;
+		case nHandle:
 		case nPrim:
 			list = mklist(mkterm(NULL, mkclosure(tp, NULL)), NULL);
 			tp = NULL;

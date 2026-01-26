@@ -43,8 +43,8 @@ struct Closure {
  */
 
 typedef enum {
-	nAssign, nCall, nClosure, nConcat, nFor, nLambda, nLet, nList, nLocal,
-	nMatch, nExtract, nPrim, nQword, nThunk, nVar, nVarsub, nWord,
+	nAssign, nCall, nClosure, nConcat, nFor, nHandle, nLambda, nLet, nList,
+	nLocal, nMatch, nExtract, nPrim, nQword, nThunk, nVar, nVarsub, nWord,
 	nRedir, nPipe		/* only appear during construction */
 } NodeKind;
 
@@ -137,6 +137,8 @@ extern List *sortlist(List *list);
 /* tree.c */
 
 extern Tree *gcmk(NodeKind VARARGS);	/* gcalloc a tree node */
+
+extern void unrefhandle(void *);
 
 
 /* closure.c */

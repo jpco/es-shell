@@ -121,7 +121,7 @@ static Boolean deepequal(Tree *t1, Tree *t2) {
 		return FALSE;
 
 	switch (t1->kind) {
-	case nWord: case nQword: case nPrim:
+	case nWord: case nQword: case nPrim: case nHandle:
 		return nstreq(t1->u[0].s, t2->u[0].s);
 	case nCall: case nThunk: case nVar:
 		return deepequal(t1->u[0].p, t2->u[0].p);
@@ -154,7 +154,7 @@ static char *dumptree(Tree *tree) {
 		switch (tree->kind) {
 		    default:
 			panic("dumptree: bad node kind %d", tree->kind);
-		    case nWord: case nQword: case nPrim:
+		    case nWord: case nQword: case nPrim: case nHandle:
 			print("static const Tree_s %s = { n%s, { { (char *) %s } } };\n",
 			      name + 1, nodename(tree->kind), dumpstring(tree->u[0].s));
 			break;
