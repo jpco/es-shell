@@ -23,6 +23,7 @@ extern void mvfd(int old, int new) {
  *	are actually done at closefds() time.
  */
 
+/* if realfd == -1, we have deferred a close(). otherwise, a dup2(). */
 typedef struct {
 	int realfd, userfd;
 } Defer;
@@ -30,6 +31,7 @@ typedef struct {
 static Defer *deftab;
 static int defcount = 0, defmax = 0;
 
+/* actually perform a close or dup */
 static void dodeferred(int realfd, int userfd) {
 	assert(userfd >= 0);
 	releasefd(userfd);
@@ -42,6 +44,7 @@ static void dodeferred(int realfd, int userfd) {
 	}
 }
 
+/* create a Defer and push it on the stack if parent, or just do it otherwise. */
 static int pushdefer(Boolean parent, int realfd, int userfd) {
 	if (parent) {
 		Defer *defer;
@@ -65,17 +68,23 @@ static int pushdefer(Boolean parent, int realfd, int userfd) {
 	}
 }
 
+/* perform a deferred mvfd (dup). returns a "ticket" used to remove the
+ * deferred operation. */
 extern int defer_mvfd(Boolean parent, int old, int new) {
 	assert(old >= 0);
 	assert(new >= 0);
 	return pushdefer(parent, old, new);
 }
 
+/* perform a deferred close. returns a "ticket" used to remove the deferred
+ * operation. */
 extern int defer_close(Boolean parent, int fd) {
 	assert(fd >= 0);
 	return pushdefer(parent, -1, fd);
 }
 
+/* take a ticket and remove the top deferred operation, to which it should
+ * correspond. closes any realfd backing the deferred operation as well. */
 extern void undefer(int ticket) {
 	if (ticket != UNREGISTERED) {
 		Defer *defer;
@@ -90,6 +99,7 @@ extern void undefer(int ticket) {
 }
 
 /* fdmap -- turn a deferred (user) fd into a real fd */
+/* has to traverse potentially multiple stack entries to get to the real fd */
 extern int fdmap(int fd) {
 	int i = defcount;
 	while (--i >= 0) {
@@ -103,7 +113,7 @@ extern int fdmap(int fd) {
 	return fd;
 }
 
-/* remapfds -- apply the fd map to the current file descriptor table */
+/* remapfds -- remove any deferred operations and apply them to the real fd table */
 static void remapfds(void) {
 	Defer *defer, *defend;
 	if (deftab == NULL)
