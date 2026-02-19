@@ -23,7 +23,7 @@
  * globals
  */
 
-Input *input;
+static Input *input;
 char *prompt, *prompt2;
 
 Boolean ignoreeof = FALSE;
@@ -48,19 +48,19 @@ static const char *locate(Input *in, const char *s) {
 static const char *error = NULL;
 
 /* yyerror -- yacc error entry point */
-extern void yyerror(const char *s) {
+extern void yyerror(Parser *p, const char *s) {
 #if sgi
 	/* this is so that trip.es works */
 	if (streq(s, "Syntax error"))
 		s = "syntax error";
 #endif
 	if (error == NULL)	/* first error is generally the most informative */
-		error = locate(input, s);
+		error = locate(p->input, s);
 }
 
 /* warn -- print a warning */
-static void warn(char *s) {
-	eprint("warning: %s\n", locate(input, s));
+static void warn(Input *in, char *s) {
+	eprint("warning: %s\n", locate(in, s));
 }
 
 
@@ -85,7 +85,8 @@ static int ungetfill(Input *in) {
 }
 
 /* unget -- push back one character */
-extern void unget(Input *in, int c) {
+extern void unget(Parser *p, int c) {
+	Input *in = p->input;
 	if (in->ungot > 0) {
 		assert(in->ungot < MAXUNGET);
 		in->unget[in->ungot++] = c;
@@ -108,11 +109,15 @@ extern void unget(Input *in, int c) {
  */
 
 /* get -- get a character, filter out nulls */
-static int get(Input *in) {
+extern int get(Parser *p) {
+	return p->input->get(p->input);
+}
+
+static int getnormal(Input *in) {
 	int c;
 	Boolean uf = (in->fill == ungetfill);
 	while ((c = (in->buf < in->bufend ? *in->buf++ : (*in->fill)(in))) == '\0')
-		warn("null character ignored");
+		warn(in, "null character ignored");
 	if (!uf && c != EOF)
 		addhistbuffer((char)c);
 	return c;
@@ -121,9 +126,9 @@ static int get(Input *in) {
 /* getverbose -- get a character, print it to standard error */
 static int getverbose(Input *in) {
 	if (in->fill == ungetfill)
-		return get(in);
+		return getnormal(in);
 	else {
-		int c = get(in);
+		int c = getnormal(in);
 		if (c != EOF) {
 			char buf = c;
 			ewrite(2, &buf, 1);
@@ -226,6 +231,8 @@ extern Tree *parse(char *pr1, char *pr2) {
 	int result;
 	assert(error == NULL);
 
+	Parser p;
+	p.input = input;
 	inityy();
 	emptyherequeue();
 
@@ -240,7 +247,7 @@ extern Tree *parse(char *pr1, char *pr2) {
 #endif
 	prompt2 = pr2;
 
-	result = yyparse();
+	result = yyparse(&p);
 
 	if (result || error != NULL) {
 		assert(error != NULL);
@@ -282,7 +289,7 @@ extern List *runinput(Input *in, int runflags) {
 
 	flags &= ~eval_inchild;
 	in->runflags = flags;
-	in->get = (flags & run_echoinput) ? getverbose : get;
+	in->get = (flags & run_echoinput) ? getverbose : getnormal;
 	in->prev = input;
 	input = in;
 
@@ -400,12 +407,12 @@ extern Tree *parseinput(Input *in) {
 
 	in->prev = input;
 	in->runflags = 0;
-	in->get = get;
+	in->get = getnormal;
 	input = in;
 
 	ExceptionHandler
 		result = parse(NULL, NULL);
-		if (get(in) != EOF)
+		if (getnormal(in) != EOF)
 			fail("$&parse", "more than one value in term");
 	CatchException (e)
 		(*input->cleanup)(input);

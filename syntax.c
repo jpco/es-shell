@@ -131,8 +131,8 @@ extern Tree *mkpipe(Tree *t1, int outfd, int infd, Tree *t2) {
 
 static Tree placeholder = { nRedir, {{NULL}} };
 
-extern Tree *redirect(Tree *t) {
-	Tree *r, *p;
+extern Tree *redirect(Parser *p, Tree *t) {
+	Tree *r, *rp;
 	if (t == NULL)
 		return NULL;
 	if (t->kind != nRedir)
@@ -141,14 +141,14 @@ extern Tree *redirect(Tree *t) {
 	t = t->CDR;
 	for (; r->kind == nRedir; r = r->CDR)
 		t = treeappend(t, r->CAR);
-	for (p = r; p->CAR != &placeholder; p = p->CDR) {
-		assert(p != NULL);
-		assert(p->kind == nList);
+	for (rp = r; rp->CAR != &placeholder; rp = rp->CDR) {
+		assert(rp != NULL);
+		assert(rp->kind == nList);
 	}
 	if (firstis(r, "%heredoc"))
-		if (!queueheredoc(r))
+		if (!queueheredoc(p, r))
 			return &errornode;
-	p->CAR = thunkify(redirect(t));
+	rp->CAR = thunkify(redirect(p, t));
 	return r;
 }
 
@@ -156,7 +156,7 @@ extern Tree *mkredircmd(char *cmd, int fd) {
 	return prefix(cmd, prefix(pstr("%d", fd), NULL));
 }
 
-extern Tree *mkredir(Tree *cmd, Tree *file) {
+extern Tree *mkredir(Parser *p, Tree *cmd, Tree *file) {
 	Tree *word = NULL;
 	if (file != NULL && file->kind == nThunk) {	/* /dev/fd operations */
 		char *op;
@@ -167,7 +167,7 @@ extern Tree *mkredir(Tree *cmd, Tree *file) {
 		else if (firstis(cmd, "%create"))
 			op = "%writeto";
 		else {
-			yyerror("bad /dev/fd redirection");
+			yyerror(p, "bad /dev/fd redirection");
 			op = "";
 		}
 		var = mk(nWord, pstr("_devfd%d", id++));

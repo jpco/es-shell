@@ -4,7 +4,7 @@
 
 #include "token.h"	/* for YYSTYPE */
 
-typedef struct Input Input;
+/* Input contains state that lasts longer than a $&parse. */
 struct Input {
 	int (*get)(Input *self);
 	int (*fill)(Input *self), (*rfill)(Input *self);
@@ -20,31 +20,32 @@ struct Input {
 	int runflags;
 };
 
-
-#define	GETC()		(*input->get)(input)
-#define	UNGETC(c)	unget(input, c)
+/* Parser contains state that lasts for one call to $&parse or less. */
+struct Parser {
+	Input *input;
+};
 
 
 /* input.c */
 
-extern Input *input;
-extern void unget(Input *in, int c);
+extern int get(Parser *p);
+extern void unget(Parser *p, int c);
 extern Boolean ignoreeof;
-extern void yyerror(const char *s);
+extern void yyerror(Parser *p, const char *s);
 
 
 /* token.c */
 
 extern const char dnw[];
-extern int yylex(YYSTYPE *y);
+extern int yylex(YYSTYPE *y, Parser *p);
 extern void inityy(void);
-extern void print_prompt2(void);
+extern void print_prompt2(Parser *p);
 
 
 /* parse.y */
 
 extern Tree *parsetree;
-extern int yyparse(void);
+extern int yyparse(Parser *p);
 
 
 /* heredoc.c */

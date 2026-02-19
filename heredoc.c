@@ -14,41 +14,41 @@ struct Here {
 static Here *hereq;
 
 /* getherevar -- read a variable from a here doc */
-extern Tree *getherevar(void) {
+extern Tree *getherevar(Parser *p) {
 	int c;
 	char *s;
 	size_t len;
 	Buffer *buf = openbuffer(0);
-	while ((c = GETC()) != EOF && !dnw[c])
+	while ((c = get(p)) != EOF && !dnw[c])
 		buf = bufputc(buf, c);
 	len = buf->len;
 	s = psealcountedbuffer(buf);
 	if (len == 0) {
-		yyerror("null variable name in here document");
+		yyerror(p, "null variable name in here document");
 		return NULL;
 	}
 	if (c != '^')
-		UNGETC(c);
+		unget(p, c);
 	return flatten(mk(nVar, mk(nWord, s)), " ");
 }
 
 /* snarfheredoc -- read a heredoc until the eof marker */
-extern Tree *snarfheredoc(const char *eof, Boolean quoted) {
+extern Tree *snarfheredoc(Parser *p, const char *eof, Boolean quoted) {
 	Tree *tree, **tailp;
 	Buffer *buf;
 	unsigned char *s;
 
 	assert(quoted || strchr(eof, '$') == NULL);	/* can never be typed (whew!) */
 	if (strchr(eof, '\n') != NULL) {
-		yyerror("here document eof-marker contains a newline");
+		yyerror(p, "here document eof-marker contains a newline");
 		return NULL;
 	}
 	ignoreeof = TRUE;
 
 	for (tree = NULL, tailp = &tree, buf = openbuffer(0);;) {
 		int c;
-		print_prompt2();
-		for (s = (unsigned char *) eof; (c = GETC()) == *s; s++)
+		print_prompt2(p);
+		for (s = (unsigned char *) eof; (c = get(p)) == *s; s++)
 			;
 		if (*s == '\0' && (c == '\n' || c == EOF)) {
 			if (buf->current == 0 && tree != NULL)
@@ -59,23 +59,23 @@ extern Tree *snarfheredoc(const char *eof, Boolean quoted) {
 		}
 		if (s != (unsigned char *) eof)
 			buf = bufncat(buf, eof, s - (unsigned char *) eof);
-		for (;; c = GETC()) {
+		for (;; c = get(p)) {
 			if (c == EOF) {
-				yyerror("incomplete here document");
+				yyerror(p, "incomplete here document");
 				freebuffer(buf);
 				ignoreeof = FALSE;
 				return NULL;
 			}
-			if (c == '$' && !quoted && (c = GETC()) != '$') {
+			if (c == '$' && !quoted && (c = get(p)) != '$') {
 				Tree *var;
-				UNGETC(c);
+				unget(p, c);
 				if (buf->current == 0)
 					freebuffer(buf);
 				else {
 					*tailp = treecons(mk(nQword, psealcountedbuffer(buf)), NULL);
 					tailp = &(*tailp)->CDR;
 				}
-				var = getherevar();
+				var = getherevar(p);
 				if (var == NULL) {
 					freebuffer(buf);
 					ignoreeof = FALSE;
@@ -97,16 +97,16 @@ extern Tree *snarfheredoc(const char *eof, Boolean quoted) {
 }
 
 /* readheredocs -- read all the heredocs at the end of a line (or fail if at end of file) */
-extern Boolean readheredocs(Boolean endfile) {
+extern Boolean readheredocs(Parser *p, Boolean endfile) {
 	for (; hereq != NULL; hereq = hereq->next) {
 		Tree *marker, *eof;
 		if (endfile) {
-			yyerror("end of file with pending here documents");
+			yyerror(p, "end of file with pending here documents");
 			return FALSE;
 		}
 		marker = hereq->marker;
 		eof = marker->CAR;
-		marker->CAR = snarfheredoc(eof->u[0].s, eof->kind == nQword);
+		marker->CAR = snarfheredoc(p, eof->u[0].s, eof->kind == nQword);
 		if (marker->CAR == NULL)
 			return FALSE;
 	}
@@ -114,7 +114,7 @@ extern Boolean readheredocs(Boolean endfile) {
 }
 
 /* queueheredoc -- add a heredoc to the queue to process at the end of the line */
-extern Boolean queueheredoc(Tree *t) {
+extern Boolean queueheredoc(Parser *p, Tree *t) {
 	Tree *eof;
 	Here *here;
 
@@ -129,7 +129,7 @@ extern Boolean queueheredoc(Tree *t) {
 	eof = t->CDR->CDR;
 	assert(eof->kind == nList);
 	if (!eof->CAR || (eof->CAR->kind != nWord && eof->CAR->kind != nQword)) {
-		yyerror("here document eof-marker not a single literal word");
+		yyerror(p, "here document eof-marker not a single literal word");
 		return FALSE;
 	}
 
