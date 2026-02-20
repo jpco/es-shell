@@ -37,6 +37,7 @@ struct Parser {
 
 /* input.c */
 
+extern char *prompt, *prompt2;
 extern int get(Parser *p);
 extern void unget(Parser *p, int c);
 extern Boolean ignoreeof;

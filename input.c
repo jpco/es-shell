@@ -203,13 +203,12 @@ extern Tree *parse(char *pr1, char *pr2) {
 	if (ISEOF(input))
 		throw(mklist(mkstr("eof"), NULL));
 
-#if HAVE_READLINE
-	prompt = (pr1 == NULL) ? "" : pr1;
-#else
+	prompt = pr1;
+	prompt2 = pr2;
+#if !HAVE_READLINE
 	if (pr1 != NULL)
 		eprint("%s", pr1);
 #endif
-	prompt2 = pr2;
 
 	result = yyparse(&p);
 
