@@ -65,76 +65,41 @@ static void warn(Input *in, char *s) {
 
 
 /*
- * unget -- character pushback
+ * getting and ungetting characters
  */
 
-/* ungetfill -- input->fill routine for ungotten characters */
-static int ungetfill(Input *in) {
-	int c;
-	assert(in->ungot > 0);
-	c = in->unget[--in->ungot];
-	if (in->ungot == 0) {
-		assert(in->rfill != NULL);
-		in->fill = in->rfill;
-		in->rfill = NULL;
-		assert(in->rbuf != NULL);
-		in->buf = in->rbuf;
-		in->rbuf = NULL;
-	}
-	return c;
+/* get -- get a character, filter out nulls */
+extern int get(Parser *p) {
+	Input *in = p->input;
+	if (in->ungot > 0)
+		return in->unget[--in->ungot];
+	return in->get(in);
 }
 
 /* unget -- push back one character */
 extern void unget(Parser *p, int c) {
 	Input *in = p->input;
-	if (in->ungot > 0) {
-		assert(in->ungot < MAXUNGET);
-		in->unget[in->ungot++] = c;
-	} else {
-		assert(in->rfill == NULL);
-		in->rfill = in->fill;
-		in->fill = ungetfill;
-		assert(in->rbuf == NULL);
-		in->rbuf = in->buf;
-		in->buf = in->bufend;
-		assert(in->ungot == 0);
-		in->ungot = 1;
-		in->unget[0] = c;
-	}
-}
-
-
-/*
- * getting characters
- */
-
-/* get -- get a character, filter out nulls */
-extern int get(Parser *p) {
-	return p->input->get(p->input);
+	assert(in->ungot < MAXUNGET);
+	in->unget[in->ungot++] = c;
 }
 
 static int getnormal(Input *in) {
 	int c;
-	Boolean uf = (in->fill == ungetfill);
 	while ((c = (in->buf < in->bufend ? *in->buf++ : (*in->fill)(in))) == '\0')
 		warn(in, "null character ignored");
-	if (!uf && c != EOF)
+	if (c != EOF)
 		addhistbuffer((char)c);
 	return c;
 }
 
 /* getverbose -- get a character, print it to standard error */
 static int getverbose(Input *in) {
-	if (in->fill == ungetfill)
-		return getnormal(in);
-	else {
-		int c = getnormal(in);
-		if (c != EOF) {
-			char buf = c;
-			ewrite(2, &buf, 1);
-		}
-		return c;
+	int c = getnormal(in);
+	if (c != EOF) {
+		char buf = c;
+		ewrite(2, &buf, 1);
 	}
+	return c;
 }
 
 /* eoffill -- report eof when called to fill input buffer */

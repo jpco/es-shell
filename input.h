@@ -6,15 +6,24 @@
 
 /* Input contains state that lasts longer than a $&parse. */
 struct Input {
-	int (*get)(Input *self);
-	int (*fill)(Input *self), (*rfill)(Input *self);
-	void (*cleanup)(Input *self);
+	/* previous Input in the stack */
 	Input *prev;
-	const char *name;
-	unsigned char *buf, *bufend, *bufbegin, *rbuf;
+
+	/* functions used to pull from Input */
+	int (*get)(Input *self);
+	int (*fill)(Input *self);
+	void (*cleanup)(Input *self);
+
+	/* input buffer variables */
 	size_t buflen;
+	unsigned char *buf, *bufend, *bufbegin, *rbuf;
+
+	/* parser pushback buffer */
 	int unget[MAXUNGET];
 	int ungot;
+
+	/* input metadata and flags */
+	const char *name;
 	int lineno;
 	int fd;
 	int runflags;
