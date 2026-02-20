@@ -18,10 +18,6 @@ struct Input {
 	size_t buflen;
 	unsigned char *buf, *bufend, *bufbegin, *rbuf;
 
-	/* parser pushback buffer */
-	int unget[MAXUNGET];
-	int ungot;
-
 	/* input metadata and flags */
 	const char *name;
 	int lineno;
@@ -32,6 +28,10 @@ struct Input {
 /* Parser contains state that lasts for one call to $&parse or less. */
 struct Parser {
 	Input *input;
+
+	/* parser pushback buffer */
+	int unget[MAXUNGET];
+	int ungot;
 };
 
 

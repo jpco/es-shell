@@ -70,17 +70,15 @@ static void warn(Input *in, char *s) {
 
 /* get -- get a character, filter out nulls */
 extern int get(Parser *p) {
-	Input *in = p->input;
-	if (in->ungot > 0)
-		return in->unget[--in->ungot];
-	return in->get(in);
+	if (p->ungot > 0)
+		return p->unget[--p->ungot];
+	return p->input->get(p->input);
 }
 
 /* unget -- push back one character */
 extern void unget(Parser *p, int c) {
-	Input *in = p->input;
-	assert(in->ungot < MAXUNGET);
-	in->unget[in->ungot++] = c;
+	assert(p->ungot < MAXUNGET);
+	p->unget[p->ungot++] = c;
 }
 
 static int getnormal(Input *in) {
@@ -198,6 +196,7 @@ extern Tree *parse(char *pr1, char *pr2) {
 
 	Parser p;
 	p.input = input;
+	p.ungot = 0;
 	inityy();
 	emptyherequeue();
 
@@ -213,6 +212,8 @@ extern Tree *parse(char *pr1, char *pr2) {
 	prompt2 = pr2;
 
 	result = yyparse(&p);
+
+	assert(p.ungot == 0);
 
 	if (result || error != NULL) {
 		assert(error != NULL);
