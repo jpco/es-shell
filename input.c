@@ -26,7 +26,6 @@
 static Input *input;
 char *prompt, *prompt2;
 
-Boolean ignoreeof = FALSE;
 Boolean resetterminal = FALSE;	/* TODO: localize when $&readline becomes a thing */
 
 #if HAVE_READLINE
@@ -161,7 +160,7 @@ static int fdfill(Input *in) {
 	} while (nread == -1 && errno == EINTR);
 
 	if (nread <= 0) {
-		if (!ignoreeof) {
+		if (!in->ignoreeof) {
 			close(in->fd);
 			in->fd = -1;
 			in->fill = eoffill;
@@ -191,10 +190,9 @@ extern Tree *parse(char *pr1, char *pr2) {
 	if (ISEOF(input))
 		throw(mklist(mkstr("eof"), NULL));
 
+	memzero(&p, sizeof (Parser));
 	p.input = input;
-	p.ungot = 0;
 	p.space = createpspace();
-	p.error = NULL;
 	oldpspace = setpspace(p.space);
 
 	inityy(&p);

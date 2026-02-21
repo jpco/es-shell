@@ -40,7 +40,7 @@ extern Tree *snarfheredoc(Parser *p, const char *eof, Boolean quoted) {
 		yyerror(p, "here document eof-marker contains a newline");
 		return NULL;
 	}
-	ignoreeof = TRUE;
+	p->input->ignoreeof = TRUE;
 
 	for (tree = NULL, tailp = &tree, buf = openbuffer(0);;) {
 		int c;
@@ -60,7 +60,7 @@ extern Tree *snarfheredoc(Parser *p, const char *eof, Boolean quoted) {
 			if (c == EOF) {
 				yyerror(p, "incomplete here document");
 				freebuffer(buf);
-				ignoreeof = FALSE;
+				p->input->ignoreeof = FALSE;
 				return NULL;
 			}
 			if (c == '$' && !quoted && (c = get(p)) != '$') {
@@ -75,7 +75,7 @@ extern Tree *snarfheredoc(Parser *p, const char *eof, Boolean quoted) {
 				var = getherevar(p);
 				if (var == NULL) {
 					freebuffer(buf);
-					ignoreeof = FALSE;
+					p->input->ignoreeof = FALSE;
 					return NULL;
 				}
 				*tailp = treecons(var, NULL);
@@ -89,7 +89,7 @@ extern Tree *snarfheredoc(Parser *p, const char *eof, Boolean quoted) {
 		}
 	}
 
-	ignoreeof = FALSE;
+	p->input->ignoreeof = FALSE;
 	return tree->CDR == NULL ? tree->CAR : tree;
 }
 

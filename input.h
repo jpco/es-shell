@@ -23,6 +23,7 @@ struct Input {
 	int lineno;
 	int fd;
 	int runflags;
+	Boolean ignoreeof;	/* should be in Parser */
 };
 
 typedef enum { NW, RW, KW } WordState;	/* nonword, realword, keyword */
