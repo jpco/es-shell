@@ -30,6 +30,7 @@ typedef enum { NW, RW, KW } WordState;	/* nonword, realword, keyword */
 /* Parser contains state that lasts for one call to $&parse or less. */
 struct Parser {
 	Input *input;
+	Tree *tree;	/* parse tree: in pspace */
 
 	/* parser pushback buffer */
 	int unget[MAXUNGET];
@@ -62,7 +63,6 @@ extern void print_prompt2(Parser *p);
 
 /* parse.y */
 
-extern Tree *parsetree;
 extern int yyparse(Parser *p);
 
 

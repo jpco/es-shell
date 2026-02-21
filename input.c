@@ -224,12 +224,12 @@ extern Tree *parse(char *pr1, char *pr2) {
 	}
 
 #if LISPTREES
-	Ref(Tree *, pt, pseal(parsetree));
+	Ref(Tree *, pt, pseal(p.tree));
 	if (input->runflags & run_lisptrees)
 		eprint("%B\n", pt);
 	RefReturn(pt);
 #else
-	return pseal(parsetree);
+	return pseal(p.tree);
 #endif
 
 }

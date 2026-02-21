@@ -51,8 +51,8 @@ typedef struct Parser Parser;
 
 %%
 
-es	: line end		{ parsetree = $1; YYACCEPT; }
-	| error end		{ yyerrok; parsetree = NULL; YYABORT; }
+es	: line end		{ p->tree = $1; YYACCEPT; }
+	| error end		{ yyerrok; p->tree = NULL; YYABORT; }
 
 end	: NL			{ if (!readheredocs(p, FALSE)) YYABORT; }
 	| ENDFILE		{ if (!readheredocs(p, TRUE)) YYABORT; }
