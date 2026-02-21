@@ -59,12 +59,13 @@ const char dnw[] = {
 
 /* print_prompt2 -- called before all continuation lines */
 extern void print_prompt2(Parser *p) {
-	p->input->lineno++;
+	Input *in = p->input;
+	in->lineno++;
 #if HAVE_READLINE
-	prompt = prompt2;
+	in->prompt = in->prompt2;
 #else
-	if ((p->input->runflags & run_interactive) && prompt2 != NULL)
-		eprint("%s", prompt2);
+	if ((p->input->runflags & run_interactive) && in->prompt2 != NULL)
+		eprint("%s", in->prompt2);
 #endif
 }
 

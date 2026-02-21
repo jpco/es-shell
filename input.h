@@ -6,7 +6,7 @@
 
 /* Input contains state that lasts longer than a $&parse. */
 struct Input {
-	/* previous Input in the stack */
+	/* previous Input */
 	Input *prev;
 
 	/* functions used to pull from Input */
@@ -14,7 +14,7 @@ struct Input {
 	int (*fill)(Input *self);
 	void (*cleanup)(Input *self);
 
-	/* input buffer variables */
+	/* input buffer */
 	size_t buflen;
 	unsigned char *buf, *bufend, *bufbegin;
 
@@ -23,7 +23,12 @@ struct Input {
 	int lineno;
 	int fd;
 	int runflags;
-	Boolean ignoreeof;	/* should be in Parser */
+
+	/* TODO: these belong in Parser, but it's a bit of work to do that
+	 * with the current input design; it's fine to wait until the Bigger
+	 * refactor to do this. */
+	Boolean ignoreeof;
+	char *prompt, *prompt2;	/* pspace-allocated */
 };
 
 typedef enum { NW, RW, KW } WordState;	/* nonword, realword, keyword */
@@ -31,14 +36,14 @@ typedef enum { NW, RW, KW } WordState;	/* nonword, realword, keyword */
 /* Parser contains state that lasts for one call to $&parse or less. */
 struct Parser {
 	Input *input;
-	void *space;	/* where the parse tree is built in memory */
+	void *space;	/* where the parse tree is kept in memory */
 
 	/* these variables are all allocated in pspace */
-	Tree *tree;	/* the final parse tree */
-	Here *hereq;	/* pending here document queue */
-	const char *error;	/* parse error */
+	Tree *tree;		/* the final parse tree */
+	Here *hereq;		/* pending here document queue */
+	const char *error;	/* syntax error, if it exists */
 
-	/* parser pushback buffer */
+	/* token pushback buffer */
 	int unget[MAXUNGET];
 	int ungot;
 
@@ -52,7 +57,6 @@ struct Parser {
 
 /* input.c */
 
-extern char *prompt, *prompt2;
 extern int get(Parser *p);
 extern void unget(Parser *p, int c);
 extern void yyerror(Parser *p, const char *s);

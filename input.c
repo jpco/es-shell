@@ -24,8 +24,6 @@
  */
 
 static Input *input;
-char *prompt, *prompt2;
-
 Boolean resetterminal = FALSE;	/* TODO: localize when $&readline becomes a thing */
 
 #if HAVE_READLINE
@@ -137,7 +135,7 @@ static int fdfill(Input *in) {
 	if (in->runflags & run_interactive && in->fd == 0) {
 		char *rlinebuf = NULL;
 		do {
-			rlinebuf = callreadline(prompt);
+			rlinebuf = callreadline(in->prompt);
 		} while (rlinebuf == NULL && errno == EINTR);
 		if (rlinebuf == NULL)
 			nread = 0;
@@ -198,11 +196,13 @@ extern Tree *parse(char *pr1, char *pr2) {
 	inityy(&p);
 	p.tokenbuf = ealloc(p.bufsize);
 
-	prompt = pr1;
-	prompt2 = pr2;
+	RefAdd(pr2);
+	input->prompt  = pr1 == NULL ? NULL : pstr("%s", pr1);
+	input->prompt2 = pr2 == NULL ? NULL : pstr("%s", pr2);
+	RefRemove(pr2);
 #if !HAVE_READLINE
-	if (pr1 != NULL)
-		eprint("%s", pr1);
+	if (input->prompt != NULL)
+		eprint("%s", input->prompt);
 #endif
 
 	result = yyparse(&p);
@@ -647,10 +647,6 @@ static int es_complete_primitive(int UNUSED count, int UNUSED key) {
 /* initinput -- called at dawn of time from main() */
 extern void initinput(void) {
 	input = NULL;
-
-	/* declare the global roots */
-	globalroot(&prompt);		/* main prompt */
-	globalroot(&prompt2);		/* secondary prompt */
 
 #if HAVE_READLINE
 	rl_readline_name = "es";
