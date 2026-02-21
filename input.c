@@ -192,16 +192,20 @@ static int fdfill(Input *in) {
 /* parse -- call yyparse(), but disable garbage collection and catch errors */
 extern Tree *parse(char *pr1, char *pr2) {
 	int result;
-	assert(error == NULL);
-
 	Parser p;
-	p.input = input;
-	p.ungot = 0;
-	inityy(&p);
-	emptyherequeue();
+	void *oldpspace;
 
+	assert(error == NULL);
 	if (ISEOF(input))
 		throw(mklist(mkstr("eof"), NULL));
+
+	p.input = input;
+	p.ungot = 0;
+	p.space = createpspace();
+	oldpspace = setpspace(p.space);
+
+	inityy(&p);
+	emptyherequeue();
 
 	prompt = pr1;
 	prompt2 = pr2;
@@ -213,6 +217,7 @@ extern Tree *parse(char *pr1, char *pr2) {
 	result = yyparse(&p);
 
 	assert(p.ungot == 0);
+	setpspace(oldpspace);
 
 	if (result || error != NULL) {
 		assert(error != NULL);

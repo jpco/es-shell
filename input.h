@@ -16,7 +16,7 @@ struct Input {
 
 	/* input buffer variables */
 	size_t buflen;
-	unsigned char *buf, *bufend, *bufbegin, *rbuf;
+	unsigned char *buf, *bufend, *bufbegin;
 
 	/* input metadata and flags */
 	const char *name;
@@ -30,7 +30,8 @@ typedef enum { NW, RW, KW } WordState;	/* nonword, realword, keyword */
 /* Parser contains state that lasts for one call to $&parse or less. */
 struct Parser {
 	Input *input;
-	Tree *tree;	/* parse tree: in pspace */
+	void *space;	/* where the parse tree is built in memory */
+	Tree *tree;	/* the final parse tree, in pspace */
 
 	/* parser pushback buffer */
 	int unget[MAXUNGET];
