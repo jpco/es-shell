@@ -27,7 +27,7 @@ static Input *input;
 char *prompt, *prompt2;
 
 Boolean ignoreeof = FALSE;
-Boolean resetterminal = FALSE;
+Boolean resetterminal = FALSE;	/* TODO: localize when $&readline becomes a thing */
 
 #if HAVE_READLINE
 #include <readline/readline.h>
@@ -197,7 +197,7 @@ extern Tree *parse(char *pr1, char *pr2) {
 	Parser p;
 	p.input = input;
 	p.ungot = 0;
-	inityy();
+	inityy(&p);
 	emptyherequeue();
 
 	if (ISEOF(input))

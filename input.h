@@ -25,6 +25,8 @@ struct Input {
 	int runflags;
 };
 
+typedef enum { NW, RW, KW } WordState;	/* nonword, realword, keyword */
+
 /* Parser contains state that lasts for one call to $&parse or less. */
 struct Parser {
 	Input *input;
@@ -32,6 +34,12 @@ struct Parser {
 	/* parser pushback buffer */
 	int unget[MAXUNGET];
 	int ungot;
+
+	/* lexer state */
+	WordState ws;
+	Boolean newline, goterror, dollar;
+	size_t bufsize;
+	char *tokenbuf;
 };
 
 
@@ -48,7 +56,7 @@ extern void yyerror(Parser *p, const char *s);
 
 extern const char dnw[];
 extern int yylex(YYSTYPE *y, Parser *p);
-extern void inityy(void);
+extern void inityy(Parser *p);
 extern void print_prompt2(Parser *p);
 
 

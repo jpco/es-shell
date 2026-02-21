@@ -10,15 +10,7 @@
 #define	BUFSIZE	((size_t) 2048)
 #define	BUFMAX	(8 * BUFSIZE)
 
-typedef enum { NW, RW, KW } State;	/* "nonword", "realword", "keyword" */
-
-static State w = NW;
-static Boolean newline = FALSE;
-static Boolean goterror = FALSE;
-static size_t bufsize = 0;
-static char *tokenbuf = NULL;
-
-#define	InsertFreeCaret()	STMT(if (w != NW) { w = NW; unget(p, c); return '^'; })
+#define	InsertFreeCaret()	STMT(if (p->ws != NW) { p->ws = NW; unget(p, c); return '^'; })
 
 
 /*
@@ -80,7 +72,7 @@ extern void print_prompt2(Parser *p) {
 static void scanerror(Parser *p, int c, char *s) {
 	while (c != '\n' && c != EOF)
 		c = get(p);
-	goterror = TRUE;
+	p->goterror = TRUE;
 	yyerror(p, s);
 }
 
@@ -142,41 +134,40 @@ static Boolean getfds(Parser *p, int fd[2], int c, int default0, int default1) {
 }
 
 extern int yylex(YYSTYPE *y, Parser *p) {
-	static Boolean dollar = FALSE;
 	int c;
 	size_t i;			/* The purpose of all these local assignments is to	*/
 	const char *meta;		/* allow optimizing compilers like gcc to load these	*/
-	char *buf = tokenbuf;		/* values into registers. On a sparc this is a		*/
+	char *buf = p->tokenbuf;	/* values into registers. */
 
-	if (goterror) {
-		goterror = FALSE;
+	if (p->goterror) {
+		p->goterror = FALSE;
 		return NL;
 	}
 
 	/* rc variable-names may contain only alnum, '*' and '_', so use dnw if we are scanning one. */
-	meta = (dollar ? dnw : nw);
-	dollar = FALSE;
-	if (newline) {
+	meta = (p->dollar ? dnw : nw);
+	p->dollar = FALSE;
+	if (p->newline) {
 		--p->input->lineno; /* slight space optimization; print_prompt2() always increments lineno */
 		print_prompt2(p);
-		newline = FALSE;
+		p->newline = FALSE;
 	}
 top:	while ((c = get(p)) == ' ' || c == '\t')
-		w = NW;
+		p->ws = NW;
 	if (c == EOF)
 		return ENDFILE;
 	if (!meta[(unsigned char) c]) {	/* it's a word or keyword. */
 		InsertFreeCaret();
-		w = RW;
+		p->ws = RW;
 		i = 0;
 		do {
 			buf[i++] = c;
-			if (i >= bufsize)
-				buf = tokenbuf = erealloc(buf, bufsize *= 2);
+			if (i >= p->bufsize)
+				buf = p->tokenbuf = erealloc(buf, p->bufsize *= 2);
 		} while ((c = get(p)) != EOF && !meta[(unsigned char) c]);
 		unget(p, c);
 		buf[i] = '\0';
-		w = KW;
+		p->ws = KW;
 		if (buf[1] == '\0') {
 			int k = *buf;
 			if (k == '@' || k == '~')
@@ -193,14 +184,14 @@ top:	while ((c = get(p)) == ' ' || c == '\t')
 			return CLOSURE;
 		else if (streq(buf, "match"))
 			return MATCH;
-		w = RW;
+		p->ws = RW;
 		y->str = pdup(buf);
 		return WORD;
 	}
 	if (c == '`' || c == '!' || c == '$' || c == '\'' || c == '=') {
 		InsertFreeCaret();
 		if (c == '!' || c == '=')
-			w = KW;
+			p->ws = KW;
 	}
 	switch (c) {
 	case '!':
@@ -219,7 +210,7 @@ top:	while ((c = get(p)) == ' ' || c == '\t')
 		unget(p, c);
 		return '`';
 	case '$':
-		dollar = TRUE;
+		p->dollar = TRUE;
 		switch (c = get(p)) {
 		case '#':	return COUNT;
 		case '^':	return FLAT;
@@ -227,19 +218,19 @@ top:	while ((c = get(p)) == ' ' || c == '\t')
 		default:	unget(p, c); return '$';
 		}
 	case '\'':
-		w = RW;
+		p->ws = RW;
 		i = 0;
 		while ((c = get(p)) != '\'' || (c = get(p)) == '\'') {
 			buf[i++] = c;
 			if (c == '\n')
 				print_prompt2(p);
 			if (c == EOF) {
-				w = NW;
+				p->ws = NW;
 				scanerror(p, c, "eof in quoted string");
 				return ERROR;
 			}
-			if (i >= bufsize)
-				buf = tokenbuf = erealloc(buf, bufsize *= 2);
+			if (i >= p->bufsize)
+				buf = p->tokenbuf = erealloc(buf, p->bufsize *= 2);
 		}
 		unget(p, c);
 		buf[i] = '\0';
@@ -258,7 +249,7 @@ top:	while ((c = get(p)) == ' ' || c == '\t')
 		unget(p, c);
 		c = '\\';
 		InsertFreeCaret();
-		w = RW;
+		p->ws = RW;
 		c = get(p);
 		switch (c) {
 		case 'a':	*buf = '\a';	break;
@@ -314,21 +305,21 @@ top:	while ((c = get(p)) == ' ' || c == '\t')
 		FALLTHROUGH;
 	case '\n':
 		p->input->lineno++;
-		newline = TRUE;
-		w = NW;
+		p->newline = TRUE;
+		p->ws = NW;
 		return NL;
 	case '(':
-		if (w == RW)	/* not keywords, so let & friends work */
+		if (p->ws == RW)	/* not keywords, so let & friends work */
 			c = SUB;
 		FALLTHROUGH;
 	case ';':
 	case '^':
 	case ')':
 	case '{': case '}':
-		w = NW;
+		p->ws = NW;
 		return c;
 	case '&':
-		w = NW;
+		p->ws = NW;
 		c = get(p);
 		if (c == '&')
 			return ANDAND;
@@ -337,7 +328,7 @@ top:	while ((c = get(p)) == ' ' || c == '\t')
 
 	case '|': {
 		int pi[2];
-		w = NW;
+		p->ws = NW;
 		c = get(p);
 		if (c == '|')
 			return OROR;
@@ -369,7 +360,7 @@ top:	while ((c = get(p)) == ' ' || c == '\t')
 			} else
 				cmd = "%heredoc";
 		else if (c == '=') {
-			w = NW;
+			p->ws = NW;
 			return CALL;
 		} else
 			cmd = "%open";
@@ -389,7 +380,7 @@ top:	while ((c = get(p)) == ' ' || c == '\t')
 			cmd = "%create";
 		goto redirection;
 	redirection:
-		w = NW;
+		p->ws = NW;
 		if (!getfds(p, fd, c, fd[0], DEFAULT))
 			return ERROR;
 		if (fd[1] != DEFAULT) {
@@ -404,20 +395,14 @@ top:	while ((c = get(p)) == ' ' || c == '\t')
 
 	default:
 		assert(c != '\0');
-		w = NW;
+		p->ws = NW;
 		return c; /* don't know what it is, let yacc barf on it */
 	}
 }
 
-extern void inityy(void) {
-	newline = FALSE;
-	w = NW;
-	if (bufsize > BUFMAX) {		/* return memory to the system if the buffer got too large */
-		efree(tokenbuf);
-		tokenbuf = NULL;
-	}
-	if (tokenbuf == NULL) {
-		bufsize = BUFSIZE;
-		tokenbuf = ealloc(bufsize);
-	}
+extern void inityy(Parser *p) {
+	p->newline = p->dollar = p->goterror = FALSE;
+	p->ws = NW;
+	p->bufsize = BUFSIZE;
+	p->tokenbuf = ealloc(p->bufsize);
 }
