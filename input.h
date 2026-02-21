@@ -31,8 +31,11 @@ typedef enum { NW, RW, KW } WordState;	/* nonword, realword, keyword */
 struct Parser {
 	Input *input;
 	void *space;	/* where the parse tree is built in memory */
-	Tree *tree;	/* the final parse tree, in pspace */
-	Here *hereq;	/* pending here document queue, in pspace */
+
+	/* these variables are all allocated in pspace */
+	Tree *tree;	/* the final parse tree */
+	Here *hereq;	/* pending here document queue */
+	const char *error;	/* parse error */
 
 	/* parser pushback buffer */
 	int unget[MAXUNGET];

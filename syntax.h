@@ -37,10 +37,6 @@ extern Tree *firstprepend(Tree *first, Tree *args);
 
 extern Tree *mkmatch(Tree *subj, Tree *cases);
 
-/* str.c */
-
-extern char *pstr(const char *fmt VARARGS);
-
 /* heredoc.c */
 
 extern Boolean readheredocs(Parser *p, Boolean endfile);

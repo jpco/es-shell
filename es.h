@@ -263,6 +263,7 @@ extern Noreturn panic(const char *fmt VARARGS);
 /* str.c */
 
 extern char *str(const char *fmt VARARGS);	/* create a gc space string by printing */
+extern char *pstr(const char *fmt VARARGS);	/* create a pspace string by printing */
 extern char *mprint(const char *fmt VARARGS);	/* create an ealloc space string by printing */
 extern StrList *mkstrlist(char *, StrList *);
 
@@ -292,7 +293,6 @@ extern Tree *parsestring(const char *str);
 extern Boolean isinteractive(void);
 extern Boolean isfromfd(void);
 extern void initinput(void);
-extern void resetparser(void);
 
 extern List *runfd(int fd, const char *name, int flags);
 extern List *runstring(const char *str, const char *name, int flags);

@@ -41,21 +41,14 @@ Boolean resetterminal = FALSE;	/* TODO: localize when $&readline becomes a thing
 /* locate -- identify where an error came from */
 static const char *locate(Input *in, const char *s) {
 	return (in->runflags & run_interactive)
-		? s
-		: str("%s:%d: %s", in->name, in->lineno, s);
+		? pstr("%s", s)
+		: pstr("%s:%d: %s", in->name, in->lineno, s);
 }
-
-static const char *error = NULL;
 
 /* yyerror -- yacc error entry point */
 extern void yyerror(Parser *p, const char *s) {
-#if sgi
-	/* this is so that trip.es works */
-	if (streq(s, "Syntax error"))
-		s = "syntax error";
-#endif
-	if (error == NULL)	/* first error is generally the most informative */
-		error = locate(p->input, s);
+	if (p->error == NULL)	/* first error is generally the most informative */
+		p->error = locate(p->input, s);
 }
 
 /* warn -- print a warning */
@@ -195,13 +188,13 @@ extern Tree *parse(char *pr1, char *pr2) {
 	Parser p;
 	void *oldpspace;
 
-	assert(error == NULL);
 	if (ISEOF(input))
 		throw(mklist(mkstr("eof"), NULL));
 
 	p.input = input;
 	p.ungot = 0;
 	p.space = createpspace();
+	p.error = NULL;
 	oldpspace = setpspace(p.space);
 
 	inityy(&p);
@@ -219,10 +212,9 @@ extern Tree *parse(char *pr1, char *pr2) {
 	assert(p.ungot == 0);
 	setpspace(oldpspace);
 
-	if (result || error != NULL) {
-		assert(error != NULL);
-		Ref(const char *, e, error);
-		error = NULL;
+	if (result || p.error != NULL) {
+		assert(p.error != NULL);
+		Ref(const char *, e, str("%s", p.error));
 		pseal(NULL);
 		fail("$&parse", "%s", e);
 		RefEnd(e);
@@ -237,11 +229,6 @@ extern Tree *parse(char *pr1, char *pr2) {
 	return pseal(p.tree);
 #endif
 
-}
-
-/* resetparser -- clear parser errors in the signal handler */
-extern void resetparser(void) {
-	error = NULL;
 }
 
 /* runinput -- run from an input source */
@@ -664,7 +651,6 @@ extern void initinput(void) {
 	input = NULL;
 
 	/* declare the global roots */
-	globalroot(&error);		/* parse errors */
 	globalroot(&prompt);		/* main prompt */
 	globalroot(&prompt2);		/* secondary prompt */
 
