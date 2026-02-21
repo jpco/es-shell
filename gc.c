@@ -486,8 +486,10 @@ extern void *pseal(void *p) {
 	for (sp = pspace; sp != NULL; sp = sp->next)
 		psize += SPACEUSED(sp);
 
-	if (psize == 0)
+	if (psize == 0) {
+		deprecate(pspace);
 		return p;
+	}
 
 	/* TODO: this is an overestimate since it counts garbage */
 	gcreserve(psize);
@@ -536,8 +538,6 @@ extern void *pseal(void *p) {
 		;
 #endif
 	deprecate(pspace);
-	pspace = newpspace(NULL);
-
 	--gcblocked;
 	return p;
 }

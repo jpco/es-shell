@@ -404,5 +404,4 @@ extern void inityy(Parser *p) {
 	p->newline = p->dollar = p->goterror = FALSE;
 	p->ws = NW;
 	p->bufsize = BUFSIZE;
-	p->tokenbuf = ealloc(p->bufsize);	/* FIXME: leaked */
 }

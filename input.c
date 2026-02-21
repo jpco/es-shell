@@ -192,10 +192,11 @@ extern Tree *parse(char *pr1, char *pr2) {
 
 	memzero(&p, sizeof (Parser));
 	p.input = input;
-	p.space = createpspace();	/* FIXME: leaked */
+	p.space = createpspace();
 	oldpspace = setpspace(p.space);
 
 	inityy(&p);
+	p.tokenbuf = ealloc(p.bufsize);
 
 	prompt = pr1;
 	prompt2 = pr2;
@@ -207,25 +208,25 @@ extern Tree *parse(char *pr1, char *pr2) {
 	result = yyparse(&p);
 
 	assert(p.ungot == 0);
-	setpspace(oldpspace);
+	if (p.tokenbuf != NULL)
+		efree(p.tokenbuf);
 
 	if (result || p.error != NULL) {
 		assert(p.error != NULL);
 		Ref(const char *, e, str("%s", p.error));
 		pseal(NULL);
+		setpspace(oldpspace);
 		fail("$&parse", "%s", e);
 		RefEnd(e);
 	}
 
+	Ref(Tree *, tree, pseal(p.tree));
+	setpspace(oldpspace);
 #if LISPTREES
-	Ref(Tree *, pt, pseal(p.tree));
 	if (input->runflags & run_lisptrees)
-		eprint("%B\n", pt);
-	RefReturn(pt);
-#else
-	return pseal(p.tree);
+		eprint("%B\n", tree);
 #endif
-
+	RefReturn(tree);
 }
 
 /* runinput -- run from an input source */
