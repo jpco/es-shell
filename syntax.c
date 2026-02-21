@@ -6,7 +6,6 @@
 #include "token.h"
 
 Tree errornode;
-Tree *parsetree;
 
 /* treecons -- create new tree list cell */
 extern Tree *treecons(Tree *car, Tree *cdr) {

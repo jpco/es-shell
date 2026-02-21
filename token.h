@@ -49,8 +49,9 @@ extern int yydebug;
 
 typedef struct Input Input;
 typedef struct Parser Parser;
+typedef struct Here Here;
 
-#line 54 "y.tab.h"
+#line 55 "y.tab.h"
 
 /* Token kinds.  */
 #ifndef YYTOKENTYPE
@@ -94,13 +95,13 @@ typedef struct Parser Parser;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 38 "./parse.y"
+#line 39 "./parse.y"
 
 	Tree *tree;
 	char *str;
 	NodeKind kind;
 
-#line 104 "y.tab.h"
+#line 105 "y.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

@@ -5,13 +5,10 @@
 #include "input.h"
 #include "syntax.h"
 
-typedef struct Here Here;
 struct Here {
 	Here *next;
 	Tree *marker;
 };
-
-static Here *hereq;
 
 /* getherevar -- read a variable from a here doc */
 extern Tree *getherevar(Parser *p) {
@@ -98,13 +95,13 @@ extern Tree *snarfheredoc(Parser *p, const char *eof, Boolean quoted) {
 
 /* readheredocs -- read all the heredocs at the end of a line (or fail if at end of file) */
 extern Boolean readheredocs(Parser *p, Boolean endfile) {
-	for (; hereq != NULL; hereq = hereq->next) {
+	for (; p->hereq != NULL; p->hereq = p->hereq->next) {
 		Tree *marker, *eof;
 		if (endfile) {
 			yyerror(p, "end of file with pending here documents");
 			return FALSE;
 		}
-		marker = hereq->marker;
+		marker = p->hereq->marker;
 		eof = marker->CAR;
 		marker->CAR = snarfheredoc(p, eof->u[0].s, eof->kind == nQword);
 		if (marker->CAR == NULL)
@@ -118,7 +115,7 @@ extern Boolean queueheredoc(Parser *p, Tree *t) {
 	Tree *eof;
 	Here *here;
 
-	assert(hereq == NULL || hereq->marker->kind == nList);
+	assert(p->hereq == NULL || p->hereq->marker->kind == nList);
 	assert(t->kind == nList);
 	assert(t->CAR->kind == nWord);
 #if !REISER_CPP
@@ -134,12 +131,12 @@ extern Boolean queueheredoc(Parser *p, Tree *t) {
 	}
 
 	here = palloc(sizeof (Here), NULL);
-	here->next = hereq;
+	here->next = p->hereq;
 	here->marker = eof;
-	hereq = here;
+	p->hereq = here;
 	return TRUE;
 }
 
-extern void emptyherequeue(void) {
-	hereq = NULL;
+extern void emptyherequeue(Parser *p) {
+	p->hereq = NULL;
 }

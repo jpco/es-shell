@@ -205,7 +205,7 @@ extern Tree *parse(char *pr1, char *pr2) {
 	oldpspace = setpspace(p.space);
 
 	inityy(&p);
-	emptyherequeue();
+	emptyherequeue(&p);
 
 	prompt = pr1;
 	prompt2 = pr2;

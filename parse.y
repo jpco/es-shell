@@ -11,6 +11,7 @@
 %code requires {
 typedef struct Input Input;
 typedef struct Parser Parser;
+typedef struct Here Here;
 }
 
 /* older byaccs don't understand this line.

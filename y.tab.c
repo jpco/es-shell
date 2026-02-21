@@ -113,8 +113,9 @@ extern int yydebug;
 
 typedef struct Input Input;
 typedef struct Parser Parser;
+typedef struct Here Here;
 
-#line 118 "y.tab.c"
+#line 119 "y.tab.c"
 
 /* Token kinds.  */
 #ifndef YYTOKENTYPE
@@ -158,13 +159,13 @@ typedef struct Parser Parser;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 38 "./parse.y"
+#line 39 "./parse.y"
 
 	Tree *tree;
 	char *str;
 	NodeKind kind;
 
-#line 168 "y.tab.c"
+#line 169 "y.tab.c"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -641,16 +642,16 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_uint8 yyrline[] =
 {
-       0,    54,    54,    55,    57,    58,    60,    61,    63,    64,
-      66,    67,    69,    70,    72,    73,    74,    75,    76,    77,
-      78,    79,    80,    81,    82,    83,    84,    86,    87,    88,
-      90,    91,    93,    94,    96,    97,    98,    99,   101,   102,
-     104,   105,   106,   108,   109,   110,   112,   114,   115,   117,
-     118,   120,   121,   123,   124,   126,   127,   128,   129,   130,
-     131,   132,   133,   134,   135,   136,   137,   138,   139,   141,
-     142,   144,   145,   147,   148,   150,   151,   152,   154,   155,
-     157,   158,   160,   161,   162,   163,   165,   166,   167,   168,
-     169,   170,   171,   172,   173,   174
+       0,    55,    55,    56,    58,    59,    61,    62,    64,    65,
+      67,    68,    70,    71,    73,    74,    75,    76,    77,    78,
+      79,    80,    81,    82,    83,    84,    85,    87,    88,    89,
+      91,    92,    94,    95,    97,    98,    99,   100,   102,   103,
+     105,   106,   107,   109,   110,   111,   113,   115,   116,   118,
+     119,   121,   122,   124,   125,   127,   128,   129,   130,   131,
+     132,   133,   134,   135,   136,   137,   138,   139,   140,   142,
+     143,   145,   146,   148,   149,   151,   152,   153,   155,   156,
+     158,   159,   161,   162,   163,   164,   166,   167,   168,   169,
+     170,   171,   172,   173,   174,   175
 };
 #endif
 
@@ -1409,547 +1410,547 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* es: line end  */
-#line 54 "./parse.y"
+#line 55 "./parse.y"
                                 { p->tree = (yyvsp[-1].tree); YYACCEPT; }
-#line 1415 "y.tab.c"
+#line 1416 "y.tab.c"
     break;
 
   case 3: /* es: error end  */
-#line 55 "./parse.y"
+#line 56 "./parse.y"
                                 { yyerrok; p->tree = NULL; YYABORT; }
-#line 1421 "y.tab.c"
+#line 1422 "y.tab.c"
     break;
 
   case 4: /* end: NL  */
-#line 57 "./parse.y"
+#line 58 "./parse.y"
                                 { if (!readheredocs(p, FALSE)) YYABORT; }
-#line 1427 "y.tab.c"
+#line 1428 "y.tab.c"
     break;
 
   case 5: /* end: ENDFILE  */
-#line 58 "./parse.y"
+#line 59 "./parse.y"
                                 { if (!readheredocs(p, TRUE)) YYABORT; }
-#line 1433 "y.tab.c"
+#line 1434 "y.tab.c"
     break;
 
   case 6: /* line: cmd  */
-#line 60 "./parse.y"
+#line 61 "./parse.y"
                                 { (yyval.tree) = (yyvsp[0].tree); }
-#line 1439 "y.tab.c"
+#line 1440 "y.tab.c"
     break;
 
   case 7: /* line: cmdsa line  */
-#line 61 "./parse.y"
+#line 62 "./parse.y"
                                 { (yyval.tree) = mkseq("%seq", (yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1445 "y.tab.c"
+#line 1446 "y.tab.c"
     break;
 
   case 8: /* body: cmd  */
-#line 63 "./parse.y"
+#line 64 "./parse.y"
                                 { (yyval.tree) = (yyvsp[0].tree); }
-#line 1451 "y.tab.c"
+#line 1452 "y.tab.c"
     break;
 
   case 9: /* body: cmdsan body  */
-#line 64 "./parse.y"
+#line 65 "./parse.y"
                                 { (yyval.tree) = mkseq("%seq", (yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1457 "y.tab.c"
+#line 1458 "y.tab.c"
     break;
 
   case 10: /* cmdsa: cmd ';'  */
-#line 66 "./parse.y"
+#line 67 "./parse.y"
                                 { (yyval.tree) = (yyvsp[-1].tree); }
-#line 1463 "y.tab.c"
+#line 1464 "y.tab.c"
     break;
 
   case 11: /* cmdsa: cmd '&'  */
-#line 67 "./parse.y"
+#line 68 "./parse.y"
                                 { (yyval.tree) = prefix("%background", mk(nList, thunkify((yyvsp[-1].tree)), NULL)); }
-#line 1469 "y.tab.c"
+#line 1470 "y.tab.c"
     break;
 
   case 12: /* cmdsan: cmdsa  */
-#line 69 "./parse.y"
+#line 70 "./parse.y"
                                 { (yyval.tree) = (yyvsp[0].tree); }
-#line 1475 "y.tab.c"
+#line 1476 "y.tab.c"
     break;
 
   case 13: /* cmdsan: cmd NL  */
-#line 70 "./parse.y"
+#line 71 "./parse.y"
                                 { (yyval.tree) = (yyvsp[-1].tree); if (!readheredocs(p, FALSE)) YYABORT; }
-#line 1481 "y.tab.c"
+#line 1482 "y.tab.c"
     break;
 
   case 14: /* cmd: %empty  */
-#line 72 "./parse.y"
+#line 73 "./parse.y"
                                                 { (yyval.tree) = NULL; }
-#line 1487 "y.tab.c"
+#line 1488 "y.tab.c"
     break;
 
   case 15: /* cmd: simple  */
-#line 73 "./parse.y"
+#line 74 "./parse.y"
                                                 { (yyval.tree) = redirect(p, (yyvsp[0].tree)); if ((yyval.tree) == &errornode) YYABORT; }
-#line 1493 "y.tab.c"
+#line 1494 "y.tab.c"
     break;
 
   case 16: /* cmd: redir cmd  */
-#line 74 "./parse.y"
+#line 75 "./parse.y"
                                                 { (yyval.tree) = redirect(p, mk(nRedir, (yyvsp[-1].tree), (yyvsp[0].tree))); if ((yyval.tree) == &errornode) YYABORT; }
-#line 1499 "y.tab.c"
+#line 1500 "y.tab.c"
     break;
 
   case 17: /* cmd: first assign  */
-#line 75 "./parse.y"
+#line 76 "./parse.y"
                                                 { (yyval.tree) = mk(nAssign, (yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1505 "y.tab.c"
+#line 1506 "y.tab.c"
     break;
 
   case 18: /* cmd: fn  */
-#line 76 "./parse.y"
+#line 77 "./parse.y"
                                                 { (yyval.tree) = (yyvsp[0].tree); }
-#line 1511 "y.tab.c"
+#line 1512 "y.tab.c"
     break;
 
   case 19: /* cmd: binder nl '(' bindings ')' nl cmd  */
-#line 77 "./parse.y"
+#line 78 "./parse.y"
                                                 { (yyval.tree) = mk((yyvsp[-6].kind), (yyvsp[-3].tree), (yyvsp[0].tree)); }
-#line 1517 "y.tab.c"
+#line 1518 "y.tab.c"
     break;
 
   case 20: /* cmd: cmd ANDAND nl cmd  */
-#line 78 "./parse.y"
+#line 79 "./parse.y"
                                                 { (yyval.tree) = mkseq("%and", (yyvsp[-3].tree), (yyvsp[0].tree)); }
-#line 1523 "y.tab.c"
+#line 1524 "y.tab.c"
     break;
 
   case 21: /* cmd: cmd OROR nl cmd  */
-#line 79 "./parse.y"
+#line 80 "./parse.y"
                                                 { (yyval.tree) = mkseq("%or", (yyvsp[-3].tree), (yyvsp[0].tree)); }
-#line 1529 "y.tab.c"
+#line 1530 "y.tab.c"
     break;
 
   case 22: /* cmd: cmd PIPE nl cmd  */
-#line 80 "./parse.y"
+#line 81 "./parse.y"
                                                 { (yyval.tree) = mkpipe((yyvsp[-3].tree), (yyvsp[-2].tree)->u[0].i, (yyvsp[-2].tree)->u[1].i, (yyvsp[0].tree)); }
-#line 1535 "y.tab.c"
+#line 1536 "y.tab.c"
     break;
 
   case 23: /* cmd: '!' caret cmd  */
-#line 81 "./parse.y"
+#line 82 "./parse.y"
                                                 { (yyval.tree) = prefix("%not", mk(nList, thunkify((yyvsp[0].tree)), NULL)); }
-#line 1541 "y.tab.c"
+#line 1542 "y.tab.c"
     break;
 
   case 24: /* cmd: '~' word words  */
-#line 82 "./parse.y"
+#line 83 "./parse.y"
                                                 { (yyval.tree) = mk(nMatch, (yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1547 "y.tab.c"
+#line 1548 "y.tab.c"
     break;
 
   case 25: /* cmd: EXTRACT word words  */
-#line 83 "./parse.y"
+#line 84 "./parse.y"
                                                 { (yyval.tree) = mk(nExtract, (yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1553 "y.tab.c"
+#line 1554 "y.tab.c"
     break;
 
   case 26: /* cmd: MATCH word nl '(' cases ')'  */
-#line 84 "./parse.y"
+#line 85 "./parse.y"
                                                 { (yyval.tree) = mkmatch((yyvsp[-4].tree), (yyvsp[-1].tree)); }
-#line 1559 "y.tab.c"
+#line 1560 "y.tab.c"
     break;
 
   case 27: /* cases: case  */
-#line 86 "./parse.y"
+#line 87 "./parse.y"
                                         { (yyval.tree) = treecons((yyvsp[0].tree), NULL); }
-#line 1565 "y.tab.c"
+#line 1566 "y.tab.c"
     break;
 
   case 28: /* cases: cases ';' case  */
-#line 87 "./parse.y"
+#line 88 "./parse.y"
                                         { (yyval.tree) = treeconsend((yyvsp[-2].tree), (yyvsp[0].tree)); }
-#line 1571 "y.tab.c"
+#line 1572 "y.tab.c"
     break;
 
   case 29: /* cases: cases NL case  */
-#line 88 "./parse.y"
+#line 89 "./parse.y"
                                         { (yyval.tree) = treeconsend((yyvsp[-2].tree), (yyvsp[0].tree)); }
-#line 1577 "y.tab.c"
+#line 1578 "y.tab.c"
     break;
 
   case 30: /* case: %empty  */
-#line 90 "./parse.y"
+#line 91 "./parse.y"
                                         { (yyval.tree) = NULL; }
-#line 1583 "y.tab.c"
+#line 1584 "y.tab.c"
     break;
 
   case 31: /* case: word first  */
-#line 91 "./parse.y"
+#line 92 "./parse.y"
                                         { (yyval.tree) = mk(nMatch, (yyvsp[-1].tree), thunkify((yyvsp[0].tree))); }
-#line 1589 "y.tab.c"
+#line 1590 "y.tab.c"
     break;
 
   case 32: /* simple: first  */
-#line 93 "./parse.y"
+#line 94 "./parse.y"
                                         { (yyval.tree) = treecons((yyvsp[0].tree), NULL); }
-#line 1595 "y.tab.c"
+#line 1596 "y.tab.c"
     break;
 
   case 33: /* simple: first args  */
-#line 94 "./parse.y"
+#line 95 "./parse.y"
                                         { (yyval.tree) = firstprepend((yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1601 "y.tab.c"
+#line 1602 "y.tab.c"
     break;
 
   case 34: /* args: word  */
-#line 96 "./parse.y"
+#line 97 "./parse.y"
                                         { (yyval.tree) = treecons((yyvsp[0].tree), NULL); }
-#line 1607 "y.tab.c"
+#line 1608 "y.tab.c"
     break;
 
   case 35: /* args: redir  */
-#line 97 "./parse.y"
+#line 98 "./parse.y"
                                         { (yyval.tree) = redirappend(NULL, (yyvsp[0].tree)); }
-#line 1613 "y.tab.c"
+#line 1614 "y.tab.c"
     break;
 
   case 36: /* args: args word  */
-#line 98 "./parse.y"
+#line 99 "./parse.y"
                                         { (yyval.tree) = treeconsend((yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1619 "y.tab.c"
+#line 1620 "y.tab.c"
     break;
 
   case 37: /* args: args redir  */
-#line 99 "./parse.y"
+#line 100 "./parse.y"
                                         { (yyval.tree) = redirappend((yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1625 "y.tab.c"
+#line 1626 "y.tab.c"
     break;
 
   case 38: /* redir: DUP  */
-#line 101 "./parse.y"
+#line 102 "./parse.y"
                                         { (yyval.tree) = (yyvsp[0].tree); }
-#line 1631 "y.tab.c"
+#line 1632 "y.tab.c"
     break;
 
   case 39: /* redir: REDIR word  */
-#line 102 "./parse.y"
+#line 103 "./parse.y"
                                         { (yyval.tree) = mkredir(p, (yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1637 "y.tab.c"
+#line 1638 "y.tab.c"
     break;
 
   case 40: /* bindings: binding  */
-#line 104 "./parse.y"
+#line 105 "./parse.y"
                                         { (yyval.tree) = treecons((yyvsp[0].tree), NULL); }
-#line 1643 "y.tab.c"
+#line 1644 "y.tab.c"
     break;
 
   case 41: /* bindings: bindings ';' binding  */
-#line 105 "./parse.y"
+#line 106 "./parse.y"
                                         { (yyval.tree) = treeconsend((yyvsp[-2].tree), (yyvsp[0].tree)); }
-#line 1649 "y.tab.c"
+#line 1650 "y.tab.c"
     break;
 
   case 42: /* bindings: bindings NL binding  */
-#line 106 "./parse.y"
+#line 107 "./parse.y"
                                         { (yyval.tree) = treeconsend((yyvsp[-2].tree), (yyvsp[0].tree)); }
-#line 1655 "y.tab.c"
+#line 1656 "y.tab.c"
     break;
 
   case 43: /* binding: %empty  */
-#line 108 "./parse.y"
+#line 109 "./parse.y"
                                         { (yyval.tree) = NULL; }
-#line 1661 "y.tab.c"
+#line 1662 "y.tab.c"
     break;
 
   case 44: /* binding: fn  */
-#line 109 "./parse.y"
+#line 110 "./parse.y"
                                         { (yyval.tree) = (yyvsp[0].tree); }
-#line 1667 "y.tab.c"
+#line 1668 "y.tab.c"
     break;
 
   case 45: /* binding: first assign  */
-#line 110 "./parse.y"
+#line 111 "./parse.y"
                                         { (yyval.tree) = mk(nAssign, (yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1673 "y.tab.c"
+#line 1674 "y.tab.c"
     break;
 
   case 46: /* assign: caret '=' caret words  */
-#line 112 "./parse.y"
+#line 113 "./parse.y"
                                         { (yyval.tree) = (yyvsp[0].tree); }
-#line 1679 "y.tab.c"
+#line 1680 "y.tab.c"
     break;
 
   case 47: /* fn: FN word params '{' body '}'  */
-#line 114 "./parse.y"
+#line 115 "./parse.y"
                                         { (yyval.tree) = fnassign((yyvsp[-4].tree), mklambda((yyvsp[-3].tree), (yyvsp[-1].tree))); }
-#line 1685 "y.tab.c"
+#line 1686 "y.tab.c"
     break;
 
   case 48: /* fn: FN word  */
-#line 115 "./parse.y"
+#line 116 "./parse.y"
                                         { (yyval.tree) = fnassign((yyvsp[0].tree), NULL); }
-#line 1691 "y.tab.c"
+#line 1692 "y.tab.c"
     break;
 
   case 49: /* first: comword  */
-#line 117 "./parse.y"
+#line 118 "./parse.y"
                                         { (yyval.tree) = (yyvsp[0].tree); }
-#line 1697 "y.tab.c"
+#line 1698 "y.tab.c"
     break;
 
   case 50: /* first: first '^' sword  */
-#line 118 "./parse.y"
+#line 119 "./parse.y"
                                         { (yyval.tree) = mk(nConcat, (yyvsp[-2].tree), (yyvsp[0].tree)); }
-#line 1703 "y.tab.c"
+#line 1704 "y.tab.c"
     break;
 
   case 51: /* sword: comword  */
-#line 120 "./parse.y"
+#line 121 "./parse.y"
                                         { (yyval.tree) = (yyvsp[0].tree); }
-#line 1709 "y.tab.c"
+#line 1710 "y.tab.c"
     break;
 
   case 52: /* sword: keyword  */
-#line 121 "./parse.y"
+#line 122 "./parse.y"
                                         { (yyval.tree) = mk(nWord, (yyvsp[0].str)); }
-#line 1715 "y.tab.c"
+#line 1716 "y.tab.c"
     break;
 
   case 53: /* word: sword  */
-#line 123 "./parse.y"
+#line 124 "./parse.y"
                                         { (yyval.tree) = (yyvsp[0].tree); }
-#line 1721 "y.tab.c"
+#line 1722 "y.tab.c"
     break;
 
   case 54: /* word: word '^' sword  */
-#line 124 "./parse.y"
+#line 125 "./parse.y"
                                         { (yyval.tree) = mk(nConcat, (yyvsp[-2].tree), (yyvsp[0].tree)); }
-#line 1727 "y.tab.c"
+#line 1728 "y.tab.c"
     break;
 
   case 55: /* comword: param  */
-#line 126 "./parse.y"
+#line 127 "./parse.y"
                                         { (yyval.tree) = (yyvsp[0].tree); }
-#line 1733 "y.tab.c"
+#line 1734 "y.tab.c"
     break;
 
   case 56: /* comword: '(' nlwords ')'  */
-#line 127 "./parse.y"
+#line 128 "./parse.y"
                                         { (yyval.tree) = (yyvsp[-1].tree); }
-#line 1739 "y.tab.c"
+#line 1740 "y.tab.c"
     break;
 
   case 57: /* comword: '{' body '}'  */
-#line 128 "./parse.y"
+#line 129 "./parse.y"
                                         { (yyval.tree) = thunkify((yyvsp[-1].tree)); }
-#line 1745 "y.tab.c"
+#line 1746 "y.tab.c"
     break;
 
   case 58: /* comword: '@' params '{' body '}'  */
-#line 129 "./parse.y"
+#line 130 "./parse.y"
                                         { (yyval.tree) = mklambda((yyvsp[-3].tree), (yyvsp[-1].tree)); }
-#line 1751 "y.tab.c"
+#line 1752 "y.tab.c"
     break;
 
   case 59: /* comword: '$' sword  */
-#line 130 "./parse.y"
+#line 131 "./parse.y"
                                         { (yyval.tree) = mk(nVar, (yyvsp[0].tree)); }
-#line 1757 "y.tab.c"
+#line 1758 "y.tab.c"
     break;
 
   case 60: /* comword: '$' sword SUB words ')'  */
-#line 131 "./parse.y"
+#line 132 "./parse.y"
                                         { (yyval.tree) = mk(nVarsub, (yyvsp[-3].tree), (yyvsp[-1].tree)); }
-#line 1763 "y.tab.c"
+#line 1764 "y.tab.c"
     break;
 
   case 61: /* comword: CALL sword  */
-#line 132 "./parse.y"
+#line 133 "./parse.y"
                                         { (yyval.tree) = mk(nCall, (yyvsp[0].tree)); }
-#line 1769 "y.tab.c"
+#line 1770 "y.tab.c"
     break;
 
   case 62: /* comword: COUNT sword  */
-#line 133 "./parse.y"
+#line 134 "./parse.y"
                                         { (yyval.tree) = mk(nCall, prefix("%count", treecons(mk(nVar, (yyvsp[0].tree)), NULL))); }
-#line 1775 "y.tab.c"
+#line 1776 "y.tab.c"
     break;
 
   case 63: /* comword: FLAT sword  */
-#line 134 "./parse.y"
+#line 135 "./parse.y"
                                         { (yyval.tree) = flatten(mk(nVar, (yyvsp[0].tree)), " "); }
-#line 1781 "y.tab.c"
+#line 1782 "y.tab.c"
     break;
 
   case 64: /* comword: PRIM WORD  */
-#line 135 "./parse.y"
+#line 136 "./parse.y"
                                         { (yyval.tree) = mk(nPrim, (yyvsp[0].str)); }
-#line 1787 "y.tab.c"
+#line 1788 "y.tab.c"
     break;
 
   case 65: /* comword: '`' sword  */
-#line 136 "./parse.y"
+#line 137 "./parse.y"
                                         { (yyval.tree) = backquote(mk(nVar, mk(nWord, "ifs")), (yyvsp[0].tree)); }
-#line 1793 "y.tab.c"
+#line 1794 "y.tab.c"
     break;
 
   case 66: /* comword: BFLAT sword  */
-#line 137 "./parse.y"
+#line 138 "./parse.y"
                                         { (yyval.tree) = flatten(backquote(mk(nVar, mk(nWord, "ifs")), (yyvsp[0].tree)), " "); }
-#line 1799 "y.tab.c"
+#line 1800 "y.tab.c"
     break;
 
   case 67: /* comword: BACKBACK word sword  */
-#line 138 "./parse.y"
+#line 139 "./parse.y"
                                         { (yyval.tree) = backquote((yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1805 "y.tab.c"
+#line 1806 "y.tab.c"
     break;
 
   case 68: /* comword: BBFLAT word sword  */
-#line 139 "./parse.y"
+#line 140 "./parse.y"
                                         { (yyval.tree) = flatten(backquote((yyvsp[-1].tree), (yyvsp[0].tree)), " "); }
-#line 1811 "y.tab.c"
+#line 1812 "y.tab.c"
     break;
 
   case 69: /* param: WORD  */
-#line 141 "./parse.y"
+#line 142 "./parse.y"
                                         { (yyval.tree) = mk(nWord, (yyvsp[0].str)); }
-#line 1817 "y.tab.c"
+#line 1818 "y.tab.c"
     break;
 
   case 70: /* param: QWORD  */
-#line 142 "./parse.y"
+#line 143 "./parse.y"
                                         { (yyval.tree) = mk(nQword, (yyvsp[0].str)); }
-#line 1823 "y.tab.c"
+#line 1824 "y.tab.c"
     break;
 
   case 71: /* params: %empty  */
-#line 144 "./parse.y"
+#line 145 "./parse.y"
                                         { (yyval.tree) = NULL; }
-#line 1829 "y.tab.c"
+#line 1830 "y.tab.c"
     break;
 
   case 72: /* params: params param  */
-#line 145 "./parse.y"
+#line 146 "./parse.y"
                                         { (yyval.tree) = treeconsend((yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1835 "y.tab.c"
+#line 1836 "y.tab.c"
     break;
 
   case 73: /* words: %empty  */
-#line 147 "./parse.y"
+#line 148 "./parse.y"
                                         { (yyval.tree) = NULL; }
-#line 1841 "y.tab.c"
+#line 1842 "y.tab.c"
     break;
 
   case 74: /* words: words word  */
-#line 148 "./parse.y"
+#line 149 "./parse.y"
                                         { (yyval.tree) = treeconsend((yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1847 "y.tab.c"
+#line 1848 "y.tab.c"
     break;
 
   case 75: /* nlwords: %empty  */
-#line 150 "./parse.y"
+#line 151 "./parse.y"
                                         { (yyval.tree) = NULL; }
-#line 1853 "y.tab.c"
+#line 1854 "y.tab.c"
     break;
 
   case 76: /* nlwords: nlwords word  */
-#line 151 "./parse.y"
+#line 152 "./parse.y"
                                         { (yyval.tree) = treeconsend((yyvsp[-1].tree), (yyvsp[0].tree)); }
-#line 1859 "y.tab.c"
+#line 1860 "y.tab.c"
     break;
 
   case 77: /* nlwords: nlwords NL  */
-#line 152 "./parse.y"
+#line 153 "./parse.y"
                                         { (yyval.tree) = (yyvsp[-1].tree); }
-#line 1865 "y.tab.c"
+#line 1866 "y.tab.c"
     break;
 
   case 82: /* binder: LOCAL  */
-#line 160 "./parse.y"
+#line 161 "./parse.y"
                         { (yyval.kind) = nLocal; }
-#line 1871 "y.tab.c"
+#line 1872 "y.tab.c"
     break;
 
   case 83: /* binder: LET  */
-#line 161 "./parse.y"
+#line 162 "./parse.y"
                         { (yyval.kind) = nLet; }
-#line 1877 "y.tab.c"
+#line 1878 "y.tab.c"
     break;
 
   case 84: /* binder: FOR  */
-#line 162 "./parse.y"
+#line 163 "./parse.y"
                         { (yyval.kind) = nFor; }
-#line 1883 "y.tab.c"
+#line 1884 "y.tab.c"
     break;
 
   case 85: /* binder: CLOSURE  */
-#line 163 "./parse.y"
+#line 164 "./parse.y"
                         { (yyval.kind) = nClosure; }
-#line 1889 "y.tab.c"
+#line 1890 "y.tab.c"
     break;
 
   case 86: /* keyword: '!'  */
-#line 165 "./parse.y"
+#line 166 "./parse.y"
                         { (yyval.str) = "!"; }
-#line 1895 "y.tab.c"
+#line 1896 "y.tab.c"
     break;
 
   case 87: /* keyword: '~'  */
-#line 166 "./parse.y"
+#line 167 "./parse.y"
                         { (yyval.str) = "~"; }
-#line 1901 "y.tab.c"
+#line 1902 "y.tab.c"
     break;
 
   case 88: /* keyword: '='  */
-#line 167 "./parse.y"
+#line 168 "./parse.y"
                         { (yyval.str) = "="; }
-#line 1907 "y.tab.c"
+#line 1908 "y.tab.c"
     break;
 
   case 89: /* keyword: EXTRACT  */
-#line 168 "./parse.y"
+#line 169 "./parse.y"
                         { (yyval.str) = "~~"; }
-#line 1913 "y.tab.c"
+#line 1914 "y.tab.c"
     break;
 
   case 90: /* keyword: LOCAL  */
-#line 169 "./parse.y"
+#line 170 "./parse.y"
                         { (yyval.str) = "local"; }
-#line 1919 "y.tab.c"
+#line 1920 "y.tab.c"
     break;
 
   case 91: /* keyword: LET  */
-#line 170 "./parse.y"
+#line 171 "./parse.y"
                         { (yyval.str) = "let"; }
-#line 1925 "y.tab.c"
+#line 1926 "y.tab.c"
     break;
 
   case 92: /* keyword: FOR  */
-#line 171 "./parse.y"
+#line 172 "./parse.y"
                         { (yyval.str) = "for"; }
-#line 1931 "y.tab.c"
+#line 1932 "y.tab.c"
     break;
 
   case 93: /* keyword: FN  */
-#line 172 "./parse.y"
+#line 173 "./parse.y"
                         { (yyval.str) = "fn"; }
-#line 1937 "y.tab.c"
+#line 1938 "y.tab.c"
     break;
 
   case 94: /* keyword: CLOSURE  */
-#line 173 "./parse.y"
+#line 174 "./parse.y"
                         { (yyval.str) = "%closure"; }
-#line 1943 "y.tab.c"
+#line 1944 "y.tab.c"
     break;
 
   case 95: /* keyword: MATCH  */
-#line 174 "./parse.y"
+#line 175 "./parse.y"
                         { (yyval.str) = "match"; }
-#line 1949 "y.tab.c"
+#line 1950 "y.tab.c"
     break;
 
 
-#line 1953 "y.tab.c"
+#line 1954 "y.tab.c"
 
       default: break;
     }

@@ -32,6 +32,7 @@ struct Parser {
 	Input *input;
 	void *space;	/* where the parse tree is built in memory */
 	Tree *tree;	/* the final parse tree, in pspace */
+	Here *hereq;	/* pending here document queue, in pspace */
 
 	/* parser pushback buffer */
 	int unget[MAXUNGET];
@@ -69,4 +70,4 @@ extern int yyparse(Parser *p);
 
 /* heredoc.c */
 
-extern void emptyherequeue(void);
+extern void emptyherequeue(Parser *p);
