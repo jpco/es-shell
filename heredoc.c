@@ -136,7 +136,3 @@ extern Boolean queueheredoc(Parser *p, Tree *t) {
 	p->hereq = here;
 	return TRUE;
 }
-
-extern void emptyherequeue(Parser *p) {
-	p->hereq = NULL;
-}

@@ -55,7 +55,6 @@ struct Parser {
 extern char *prompt, *prompt2;
 extern int get(Parser *p);
 extern void unget(Parser *p, int c);
-extern Boolean ignoreeof;
 extern void yyerror(Parser *p, const char *s);
 
 
@@ -70,8 +69,3 @@ extern void print_prompt2(Parser *p);
 /* parse.y */
 
 extern int yyparse(Parser *p);
-
-
-/* heredoc.c */
-
-extern void emptyherequeue(Parser *p);

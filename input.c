@@ -192,11 +192,10 @@ extern Tree *parse(char *pr1, char *pr2) {
 
 	memzero(&p, sizeof (Parser));
 	p.input = input;
-	p.space = createpspace();
+	p.space = createpspace();	/* FIXME: leaked */
 	oldpspace = setpspace(p.space);
 
 	inityy(&p);
-	emptyherequeue(&p);
 
 	prompt = pr1;
 	prompt2 = pr2;
