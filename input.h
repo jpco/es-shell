@@ -10,8 +10,8 @@ struct Input {
 	Input *prev;
 
 	/* functions used to pull from Input */
-	int (*get)(Input *self);
-	int (*fill)(Input *self);
+	int (*get)(Input *self, List *reader);
+	int (*fill)(Input *self, List *reader);
 	void (*cleanup)(Input *self);
 
 	/* input buffer */
@@ -36,6 +36,7 @@ typedef enum { NW, RW, KW } WordState;	/* nonword, realword, keyword */
 /* Parser contains state that lasts for one call to $&parse or less. */
 struct Parser {
 	Input *input;
+	List *reader;
 	void *space;	/* where the parse tree is kept in memory */
 
 	/* these variables are all allocated in pspace */

@@ -149,6 +149,19 @@ PRIM(var) {
 	return list;
 }
 
+PRIM(newparse) {
+	List *result;
+	Ref(List *, reader, list);
+	Ref(Tree *, tree, NULL);
+	tree = parse(reader, NULL, NULL);
+	result = (tree == NULL)
+		   ? NULL
+		   : mklist(mkterm(NULL, mkclosure(gcmk(nThunk, tree), NULL)),
+			    NULL);
+	RefEnd2(tree, reader);
+	return result;
+}
+
 static void loginput(char *input) {
 	char *c;
 	List *fn = varlookup("fn-%write-history", NULL);
@@ -183,7 +196,7 @@ PRIM(parse) {
 
 	Ref(Tree *, tree, NULL);
 	ExceptionHandler
-		tree = parse(prompt1, prompt2);
+		tree = parse(NULL, prompt1, prompt2);
 	CatchException (ex)
 		Ref(List *, e, ex);
 		loginput(dumphistbuffer());
@@ -347,6 +360,8 @@ PRIM(resetterminal) {
 PRIM(readline) {
 	char *line;
 	char *prompt = (list == NULL ? "" : getstr(list->term));
+	if (list->next != NULL)
+		fail("$&readline", "usage: %read-line [prompt]");
 
 	do {
 		line = callreadline(prompt);
@@ -354,7 +369,8 @@ PRIM(readline) {
 
 	if (line == NULL)
 		return NULL;
-	list = mklist(mkstr(line), NULL);
+	list = mklist(mkstr(str("%s", line)), NULL);
+	efree(line);
 	return list;
 }
 #endif
@@ -376,6 +392,7 @@ extern Dict *initprims_etc(Dict *primdict) {
 	X(fsplit);
 	X(var);
 	X(parse);
+	X(newparse);
 	X(batchloop);
 	X(collect);
 	X(home);

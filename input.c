@@ -62,7 +62,7 @@ static void warn(Input *in, char *s) {
 extern int get(Parser *p) {
 	if (p->ungot > 0)
 		return p->unget[--p->ungot];
-	return p->input->get(p->input);
+	return p->input->get(p->input, p->reader);
 }
 
 /* unget -- push back one character */
@@ -71,9 +71,9 @@ extern void unget(Parser *p, int c) {
 	p->unget[p->ungot++] = c;
 }
 
-static int getnormal(Input *in) {
+static int getnormal(Input *in, List *reader) {
 	int c;
-	while ((c = (in->buf < in->bufend ? *in->buf++ : (*in->fill)(in))) == '\0')
+	while ((c = (in->buf < in->bufend ? *in->buf++ : (*in->fill)(in, reader))) == '\0')
 		warn(in, "null character ignored");
 	if (c != EOF)
 		addhistbuffer((char)c);
@@ -81,8 +81,8 @@ static int getnormal(Input *in) {
 }
 
 /* getverbose -- get a character, print it to standard error */
-static int getverbose(Input *in) {
-	int c = getnormal(in);
+static int getverbose(Input *in, List *reader) {
+	int c = getnormal(in, reader);
 	if (c != EOF) {
 		char buf = c;
 		ewrite(2, &buf, 1);
@@ -91,7 +91,7 @@ static int getverbose(Input *in) {
 }
 
 /* eoffill -- report eof when called to fill input buffer */
-static int eoffill(Input UNUSED *in) {
+static int eoffill(Input UNUSED *in, List UNUSED *reader) {
 	assert(in->fd == -1);
 	return EOF;
 }
@@ -124,10 +124,65 @@ extern char *callreadline(char *prompt0) {
 }
 #endif
 
+/* cmdfill -- fill input buffer by running a command */
+static int cmdfill(Input *in, List *reader) {
+	int oldfd;
+	List *result;
+	char *read;
+	size_t nread;
+
+	assert(reader != NULL);
+	assert(in->buf == in->bufend);
+	assert(in->fd >= 0);
+
+	oldfd = dup(0);
+	if (dup2(in->fd, 0) == -1) {
+		close(oldfd);
+		fail("$&parse", "dup2: %s", esstrerror(errno));
+	}
+
+	ExceptionHandler
+
+		result = eval(reader, NULL, 0);
+
+	CatchException (e)
+
+		mvfd(oldfd, 0);
+		throw(e);
+
+	EndExceptionHandler
+
+	mvfd(oldfd, 0);
+
+	if (result == NULL) {	/* eof */
+		if (!in->ignoreeof) {
+			close(in->fd);
+			in->fd = -1;
+			in->fill = eoffill;
+			in->runflags &= ~run_interactive;
+		}
+		return EOF;
+	}
+	read = str("%L\n", result, " ");
+	if ((nread = strlen(read)) > in->buflen) {
+		in->bufbegin = erealloc(in->bufbegin, nread);
+		in->buflen = nread;
+	}
+	memcpy(in->bufbegin, read, nread);
+
+	in->buf = in->bufbegin;
+	in->bufend = &in->buf[nread];
+
+	return *in->buf++;
+}
 
 /* fdfill -- fill input buffer by reading from a file descriptor */
-static int fdfill(Input *in) {
+static int fdfill(Input *in, List *reader) {
 	long nread;
+
+	if (reader != NULL)
+		return cmdfill(in, reader);
+
 	assert(in->buf == in->bufend);
 	assert(in->fd >= 0);
 
@@ -180,7 +235,7 @@ static int fdfill(Input *in) {
  */
 
 /* parse -- call yyparse(), but disable garbage collection and catch errors */
-extern Tree *parse(char *pr1, char *pr2) {
+extern Tree *parse(List *reader, char *pr1, char *pr2) {
 	int result;
 	Parser p;
 	void *oldpspace;
@@ -190,6 +245,8 @@ extern Tree *parse(char *pr1, char *pr2) {
 
 	memzero(&p, sizeof (Parser));
 	p.input = input;
+	p.reader = reader;
+	RefAdd(p.reader);
 	p.space = createpspace();
 	oldpspace = setpspace(p.space);
 
@@ -207,6 +264,7 @@ extern Tree *parse(char *pr1, char *pr2) {
 
 	result = yyparse(&p);
 
+	RefRemove(p.reader);
 	assert(p.ungot == 0);
 	if (p.tokenbuf != NULL)
 		efree(p.tokenbuf);
@@ -325,7 +383,7 @@ static void stringcleanup(Input *in) {
 }
 
 /* stringfill -- placeholder than turns into EOF right away */
-static int stringfill(Input *in) {
+static int stringfill(Input *in, List UNUSED *reader) {
 	in->fill = eoffill;
 	return EOF;
 }
@@ -366,8 +424,8 @@ extern Tree *parseinput(Input *in) {
 	input = in;
 
 	ExceptionHandler
-		result = parse(NULL, NULL);
-		if (getnormal(in) != EOF)
+		result = parse(NULL, NULL, NULL);
+		if (getnormal(in, NULL) != EOF)
 			fail("$&parse", "more than one value in term");
 	CatchException (e)
 		(*input->cleanup)(input);

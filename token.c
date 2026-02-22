@@ -61,12 +61,8 @@ const char dnw[] = {
 extern void print_prompt2(Parser *p) {
 	Input *in = p->input;
 	in->lineno++;
-#if HAVE_READLINE
-	in->prompt = in->prompt2;
-#else
 	if ((p->input->runflags & run_interactive) && in->prompt2 != NULL)
 		eprint("%s", in->prompt2);
-#endif
 }
 
 /* scanerror -- called for lexical errors */
