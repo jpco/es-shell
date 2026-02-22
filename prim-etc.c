@@ -342,6 +342,21 @@ PRIM(resetterminal) {
 	resetterminal = TRUE;
 	return ltrue;
 }
+
+
+PRIM(readline) {
+	char *line;
+	char *prompt = (list == NULL ? "" : getstr(list->term));
+
+	do {
+		line = callreadline(prompt);
+	} while (line == NULL && errno == EINTR);
+
+	if (line == NULL)
+		return NULL;
+	list = mklist(mkstr(line), NULL);
+	return list;
+}
 #endif
 
 
@@ -377,6 +392,7 @@ extern Dict *initprims_etc(Dict *primdict) {
 	X(writehistory);
 	X(resetterminal);
 	X(setmaxhistorylength);
+	X(readline);
 #endif
 	return primdict;
 }

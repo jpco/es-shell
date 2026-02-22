@@ -98,7 +98,7 @@ static int eoffill(Input UNUSED *in) {
 
 #if HAVE_READLINE
 /* callreadline -- readline wrapper */
-static char *callreadline(char *prompt0) {
+extern char *callreadline(char *prompt0) {
 	char *r;
 	Ref(char *volatile, prompt, prompt0);
 	if (prompt == NULL)

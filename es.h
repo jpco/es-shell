@@ -306,6 +306,7 @@ extern List *runstring(const char *str, const char *name, int flags);
 
 #if HAVE_READLINE
 extern Boolean resetterminal;
+extern char *callreadline(char *prompt);
 #endif
 
 
