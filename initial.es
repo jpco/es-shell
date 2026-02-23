@@ -650,7 +650,36 @@ if {~ <=$&primitives writehistory} {
 
 fn-%batch-loop		= $&batchloop
 fn-%is-interactive	= $&isinteractive
-fn-%parse		= $&parse
+
+if {~ <=$&primitives readline} {
+	fn-%read-line = $&readline
+} {
+	fn %read-line prompt {
+		echo -n $prompt
+		$&read
+	}
+}
+
+fn %parse {
+	if %is-interactive {
+		let (in = (); p = $*(1))
+		unwind-protect {
+			$&parse {
+				let (r = <={%read-line $p}) {
+					in = $in $r
+					p = $*(2)
+					result $r
+				}
+			}
+		} {
+			if {!~ $#fn-%write-history 0 && !~ $#in 0} {
+				%write-history <={%flatten \n $in}
+			}
+		}
+	} {
+		$&parse	# fall back to built-in read with no prompt
+	}
+}
 
 fn %interactive-loop {
 	let (result = <=true) {
@@ -685,45 +714,6 @@ fn %interactive-loop {
 	}
 }
 
-
-#	These functions use the new alternative to the existing $&parse
-#	primitive, $&newparse, and the new $&readline primitive.
-#
-#	The difference between $&parse and $&newparse is that $&parse
-#	takes prompt arguments and reads from the shell all by itself,
-#	using entirely hardcoded logic, while $&newparse is given a
-#	command to run; the latter allows users to customize how input
-#	is read, and how history is written, to a much greater degree.
-
-#if {~ <=$&primitives readline} {
-#	fn-%read-line = $&readline
-#} {
-#	fn %read-line prompt {
-#		echo -n $prompt
-#		$&read
-#	}
-#}
-#
-#fn %parse {
-#	if %is-interactive {
-#		let (in = (); p = $*(1))
-#		unwind-protect {
-#			$&newparse {
-#				let (r = <={%read-line $p}) {
-#					in = $in $r
-#					p = $*(2)
-#					result $r
-#				}
-#			}
-#		} {
-#			if {!~ $#fn-%write-history 0 && !~ $#in 0} {
-#				%write-history <={%flatten \n $in}
-#			}
-#		}
-#	} {
-#		$&newparse	# fall back to built-in read with no prompt
-#	}
-#}
 
 #	These functions are potentially passed to a REPL as the %dispatch
 #	function.  (For %eval-noprint, note that an empty list prepended

@@ -6,29 +6,11 @@
 
 /* Input contains state that lasts longer than a $&parse. */
 struct Input {
-	/* previous Input */
-	Input *prev;
-
-	/* functions used to pull from Input */
-	int (*get)(Input *self, List *reader);
-	int (*fill)(Input *self, List *reader);
-	void (*cleanup)(Input *self);
-
-	/* input buffer */
-	size_t buflen;
-	unsigned char *buf, *bufend, *bufbegin;
-
-	/* input metadata and flags */
-	const char *name;
+	const char *name, *str;
 	int lineno;
 	int fd;
+	Boolean eof;
 	int runflags;
-
-	/* TODO: these belong in Parser, but it's a bit of work to do that
-	 * with the current input design; it's fine to wait until the Bigger
-	 * refactor to do this. */
-	Boolean ignoreeof;
-	char *prompt, *prompt2;	/* pspace-allocated */
 };
 
 typedef enum { NW, RW, KW } WordState;	/* nonword, realword, keyword */
@@ -37,20 +19,23 @@ typedef enum { NW, RW, KW } WordState;	/* nonword, realword, keyword */
 struct Parser {
 	Input *input;
 	List *reader;
-	void *space;	/* where the parse tree is kept in memory */
+	void *space;	/* pspace, for parser-related allocations */
 
 	/* these variables are all allocated in pspace */
 	Tree *tree;		/* the final parse tree */
 	Here *hereq;		/* pending here document queue */
 	const char *error;	/* syntax error, if it exists */
 
+	/* read buffer */
+	size_t buflen;
+	unsigned char *buf, *bufend, *bufbegin;
+
 	/* token pushback buffer */
-	int unget[MAXUNGET];
-	int ungot;
+	int ungot, unget[MAXUNGET];
 
 	/* lexer state */
 	WordState ws;
-	Boolean newline, goterror, dollar;
+	Boolean dollar;
 	size_t bufsize;
 	char *tokenbuf;
 };
