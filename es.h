@@ -263,6 +263,7 @@ extern Noreturn panic(const char *fmt VARARGS);
 /* str.c */
 
 extern char *str(const char *fmt VARARGS);	/* create a gc space string by printing */
+extern char *pstr(const char *fmt VARARGS);	/* create a pspace string by printing */
 extern char *mprint(const char *fmt VARARGS);	/* create an ealloc space string by printing */
 extern StrList *mkstrlist(char *, StrList *);
 
@@ -287,13 +288,11 @@ extern Boolean streq2(const char *s, const char *t1, const char *t2);
 
 /* input.c */
 
-extern char *prompt, *prompt2;
-extern Tree *parse(char *esprompt1, char *esprompt2);
+extern Tree *parse(char *prompt1, char *prompt2);
 extern Tree *parsestring(const char *str);
 extern Boolean isinteractive(void);
 extern Boolean isfromfd(void);
 extern void initinput(void);
-extern void resetparser(void);
 
 extern List *runfd(int fd, const char *name, int flags);
 extern List *runstring(const char *str, const char *name, int flags);
@@ -403,6 +402,9 @@ extern void gcdisable(void);			/* disable collections */
 extern Boolean gcisblocked(void);		/* is collection disabled? */
 
 /* operations with pspace, the explicitly-collected gc space for parse tree building */
+extern void *createpspace(void);
+extern void *setpspace(void *);
+
 extern void *palloc(size_t n, Tag *t);		/* allocate n with collection tag t, but in pspace */
 extern void *pseal(void *p);			/* collect pspace into gcspace with root p */
 extern char *pdup(const char *s);		/* copy a 0-terminated string into pspace */

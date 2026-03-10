@@ -312,7 +312,6 @@ extern void sigchk(void) {
 			return;
 		}
 	}
-	resetparser();
 	Ref(List *, e, NULL);
 	gcdisable();
 	e = mklist(mkstr("signal"), mklist(mkstr(signame(sig)), NULL));

@@ -23,11 +23,8 @@
  * globals
  */
 
-Input *input;
-char *prompt, *prompt2;
-
-Boolean ignoreeof = FALSE;
-Boolean resetterminal = FALSE;
+static Input *input;
+Boolean resetterminal = FALSE;	/* TODO: localize when $&readline becomes a thing */
 
 #if HAVE_READLINE
 #include <readline/readline.h>
@@ -41,95 +38,56 @@ Boolean resetterminal = FALSE;
 /* locate -- identify where an error came from */
 static const char *locate(Input *in, const char *s) {
 	return (in->runflags & run_interactive)
-		? s
-		: str("%s:%d: %s", in->name, in->lineno, s);
+		? pstr("%s", s)
+		: pstr("%s:%d: %s", in->name, in->lineno, s);
 }
 
-static const char *error = NULL;
-
 /* yyerror -- yacc error entry point */
-extern void yyerror(const char *s) {
-#if sgi
-	/* this is so that trip.es works */
-	if (streq(s, "Syntax error"))
-		s = "syntax error";
-#endif
-	if (error == NULL)	/* first error is generally the most informative */
-		error = locate(input, s);
+extern void yyerror(Parser *p, const char *s) {
+	if (p->error == NULL)	/* first error is generally the most informative */
+		p->error = locate(p->input, s);
 }
 
 /* warn -- print a warning */
-static void warn(char *s) {
-	eprint("warning: %s\n", locate(input, s));
+static void warn(Input *in, char *s) {
+	eprint("warning: %s\n", locate(in, s));
 }
 
 
 /*
- * unget -- character pushback
- */
-
-/* ungetfill -- input->fill routine for ungotten characters */
-static int ungetfill(Input *in) {
-	int c;
-	assert(in->ungot > 0);
-	c = in->unget[--in->ungot];
-	if (in->ungot == 0) {
-		assert(in->rfill != NULL);
-		in->fill = in->rfill;
-		in->rfill = NULL;
-		assert(in->rbuf != NULL);
-		in->buf = in->rbuf;
-		in->rbuf = NULL;
-	}
-	return c;
-}
-
-/* unget -- push back one character */
-extern void unget(Input *in, int c) {
-	if (in->ungot > 0) {
-		assert(in->ungot < MAXUNGET);
-		in->unget[in->ungot++] = c;
-	} else {
-		assert(in->rfill == NULL);
-		in->rfill = in->fill;
-		in->fill = ungetfill;
-		assert(in->rbuf == NULL);
-		in->rbuf = in->buf;
-		in->buf = in->bufend;
-		assert(in->ungot == 0);
-		in->ungot = 1;
-		in->unget[0] = c;
-	}
-}
-
-
-/*
- * getting characters
+ * getting and ungetting characters
  */
 
 /* get -- get a character, filter out nulls */
-static int get(Input *in) {
+extern int get(Parser *p) {
+	if (p->ungot > 0)
+		return p->unget[--p->ungot];
+	return p->input->get(p->input);
+}
+
+/* unget -- push back one character */
+extern void unget(Parser *p, int c) {
+	assert(p->ungot < MAXUNGET);
+	p->unget[p->ungot++] = c;
+}
+
+static int getnormal(Input *in) {
 	int c;
-	Boolean uf = (in->fill == ungetfill);
 	while ((c = (in->buf < in->bufend ? *in->buf++ : (*in->fill)(in))) == '\0')
-		warn("null character ignored");
-	if (!uf && c != EOF)
+		warn(in, "null character ignored");
+	if (c != EOF)
 		addhistbuffer((char)c);
 	return c;
 }
 
 /* getverbose -- get a character, print it to standard error */
 static int getverbose(Input *in) {
-	if (in->fill == ungetfill)
-		return get(in);
-	else {
-		int c = get(in);
-		if (c != EOF) {
-			char buf = c;
-			ewrite(2, &buf, 1);
-		}
-		return c;
+	int c = getnormal(in);
+	if (c != EOF) {
+		char buf = c;
+		ewrite(2, &buf, 1);
 	}
+	return c;
 }
 
 /* eoffill -- report eof when called to fill input buffer */
@@ -177,7 +135,7 @@ static int fdfill(Input *in) {
 	if (in->runflags & run_interactive && in->fd == 0) {
 		char *rlinebuf = NULL;
 		do {
-			rlinebuf = callreadline(prompt);
+			rlinebuf = callreadline(in->prompt);
 		} while (rlinebuf == NULL && errno == EINTR);
 		if (rlinebuf == NULL)
 			nread = 0;
@@ -200,7 +158,7 @@ static int fdfill(Input *in) {
 	} while (nread == -1 && errno == EINTR);
 
 	if (nread <= 0) {
-		if (!ignoreeof) {
+		if (!in->ignoreeof) {
 			close(in->fd);
 			in->fd = -1;
 			in->fill = eoffill;
@@ -224,47 +182,51 @@ static int fdfill(Input *in) {
 /* parse -- call yyparse(), but disable garbage collection and catch errors */
 extern Tree *parse(char *pr1, char *pr2) {
 	int result;
-	assert(error == NULL);
-
-	inityy();
-	emptyherequeue();
+	Parser p;
+	void *oldpspace;
 
 	if (ISEOF(input))
 		throw(mklist(mkstr("eof"), NULL));
 
-#if HAVE_READLINE
-	prompt = (pr1 == NULL) ? "" : pr1;
-#else
-	if (pr1 != NULL)
-		eprint("%s", pr1);
+	memzero(&p, sizeof (Parser));
+	p.input = input;
+	p.space = createpspace();
+	oldpspace = setpspace(p.space);
+
+	inityy(&p);
+	p.tokenbuf = ealloc(p.bufsize);
+
+	RefAdd(pr2);
+	input->prompt  = pr1 == NULL ? NULL : pstr("%s", pr1);
+	input->prompt2 = pr2 == NULL ? NULL : pstr("%s", pr2);
+	RefRemove(pr2);
+#if !HAVE_READLINE
+	if (input->prompt != NULL)
+		eprint("%s", input->prompt);
 #endif
-	prompt2 = pr2;
 
-	result = yyparse();
+	result = yyparse(&p);
 
-	if (result || error != NULL) {
-		assert(error != NULL);
-		Ref(const char *, e, error);
-		error = NULL;
+	assert(p.ungot == 0);
+	if (p.tokenbuf != NULL)
+		efree(p.tokenbuf);
+
+	if (result || p.error != NULL) {
+		assert(p.error != NULL);
+		Ref(const char *, e, str("%s", p.error));
 		pseal(NULL);
+		setpspace(oldpspace);
 		fail("$&parse", "%s", e);
 		RefEnd(e);
 	}
 
+	Ref(Tree *, tree, pseal(p.tree));
+	setpspace(oldpspace);
 #if LISPTREES
-	Ref(Tree *, pt, pseal(parsetree));
 	if (input->runflags & run_lisptrees)
-		eprint("%B\n", pt);
-	RefReturn(pt);
-#else
-	return pseal(parsetree);
+		eprint("%B\n", tree);
 #endif
-
-}
-
-/* resetparser -- clear parser errors in the signal handler */
-extern void resetparser(void) {
-	error = NULL;
+	RefReturn(tree);
 }
 
 /* runinput -- run from an input source */
@@ -282,7 +244,7 @@ extern List *runinput(Input *in, int runflags) {
 
 	flags &= ~eval_inchild;
 	in->runflags = flags;
-	in->get = (flags & run_echoinput) ? getverbose : get;
+	in->get = (flags & run_echoinput) ? getverbose : getnormal;
 	in->prev = input;
 	input = in;
 
@@ -400,12 +362,12 @@ extern Tree *parseinput(Input *in) {
 
 	in->prev = input;
 	in->runflags = 0;
-	in->get = get;
+	in->get = getnormal;
 	input = in;
 
 	ExceptionHandler
 		result = parse(NULL, NULL);
-		if (get(in) != EOF)
+		if (getnormal(in) != EOF)
 			fail("$&parse", "more than one value in term");
 	CatchException (e)
 		(*input->cleanup)(input);
@@ -685,11 +647,6 @@ static int es_complete_primitive(int UNUSED count, int UNUSED key) {
 /* initinput -- called at dawn of time from main() */
 extern void initinput(void) {
 	input = NULL;
-
-	/* declare the global roots */
-	globalroot(&error);		/* parse errors */
-	globalroot(&prompt);		/* main prompt */
-	globalroot(&prompt2);		/* secondary prompt */
 
 #if HAVE_READLINE
 	rl_readline_name = "es";
