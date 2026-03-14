@@ -413,7 +413,7 @@ PRIM(newfd) {
 	return mklist(mkstr(str("%d", newfd())), NULL);
 }
 
-/* read1 -- read one byte */
+/* read1 -- read one byte, return the byte */
 static int read1(int fd) {
 	int nread;
 	unsigned char buf;
@@ -426,6 +426,18 @@ static int read1(int fd) {
 	return nread == 0 ? EOF : buf;
 }
 
+/* readn -- read up to n bytes, return the number read */
+static int readn(int fd, char *s, size_t n) {
+	int nread;
+	do {
+		nread = read(fd, s, n);
+		SIGCHK();
+	} while (nread == -1 && errno == EINTR);
+	if (nread == -1)
+		fail("$&read", "%s", esstrerror(errno));
+	return nread;
+}
+
 PRIM(read) {
 	int c;
 	int fd = fdmap(0);
@@ -435,11 +447,36 @@ PRIM(read) {
 		freebuffer(buffer);
 	buffer = openbuffer(0);
 
-	while ((c = read1(fd)) != EOF && c != '\n')
-		if (c == '\0')
-			fail("$&read", "%%read: null character encountered");
-		else
-			buffer = bufputc(buffer, c);
+#if HAVE_LSEEK
+	if (lseek(fd, 0, SEEK_CUR) < 0) {
+#endif
+		while ((c = read1(fd)) != EOF && c != '\n')
+			if (c == '\0')
+				fail("$&read", "%%read: null character encountered");
+			else
+				buffer = bufputc(buffer, c);
+#if HAVE_LSEEK
+	} else {
+		int n;
+		char *np, *zp;
+		char s[BUFSIZE];
+		c = EOF;
+		while ((n = readn(fd, s, BUFSIZE)) > 0) {
+			c = 0;
+			if ((np = strchr(s, '\n')) != NULL) {
+				lseek(fd, 1 + ((np - s) - n), SEEK_CUR);
+				n = np - s;
+			}
+			if ((zp = memchr(s, '\0', n)) != NULL) {
+				lseek(fd, 1 + ((zp - s) - n), SEEK_CUR);
+				fail("$&read", "%%read: null character encountered");
+			}
+			buffer = bufncat(buffer, s, n);
+			if (np != NULL && *np == '\n')
+				break;
+		}
+	}
+#endif
 
 	if (c == EOF && buffer->current == 0) {
 		freebuffer(buffer);
