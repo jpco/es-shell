@@ -440,7 +440,7 @@ PRIM(resetterminal) {
 PRIM(readline) {
 	char *line;
 	char *prompt = (list == NULL ? "" : getstr(list->term));
-	if (list->next != NULL)
+	if (list != NULL && list->next != NULL)
 		fail("$&readline", "usage: %read-line [prompt]");
 
 	do {
