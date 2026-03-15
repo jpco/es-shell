@@ -46,16 +46,6 @@ static void warn(Input *in, char *s) {
  * getting and ungetting characters
  */
 
-static void initbuf(Parser *p, const char *initial) {
-	p->buflen = initial == NULL ? BUFSIZE : strlen(initial);
-	p->bufbegin = p->buf = ealloc(p->buflen);
-	if (initial != NULL) {
-		memcpy(p->buf, initial, p->buflen);
-		p->bufend = p->bufbegin + p->buflen;
-	} else
-		p->bufend = p->bufbegin;
-}
-
 /* fill -- fill input buffer by running a command */
 static int fill(Parser *p) {
 	int oldfd;
@@ -65,12 +55,6 @@ static int fill(Parser *p) {
 	Input *in = p->input;
 
 	assert(p->buf == p->bufend);
-
-	if (in->str != NULL) {
-		initbuf(p, in->str);
-		in->str = NULL;
-		return *p->buf++;
-	}
 
 	if (in->fd < 0) {
 		in->eof = TRUE;
@@ -136,6 +120,17 @@ extern void unget(Parser *p, int c) {
 	p->unget[p->ungot++] = c;
 }
 
+static void initbuf(Parser *p) {
+	const char *initial = p->input->str;
+	p->buflen = initial == NULL ? BUFSIZE : strlen(initial);
+	p->bufbegin = p->buf = ealloc(p->buflen);
+	if (initial != NULL) {
+		memcpy(p->buf, initial, p->buflen);
+		p->bufend = p->bufbegin + p->buflen;
+	} else
+		p->bufend = p->bufbegin;
+}
+
 /*
  * parse -- call yyparse(), but disable garbage collection and catch errors
  */
@@ -157,7 +152,7 @@ extern Tree *parse(List *reader) {
 	oldpspace = setpspace(p.space);
 
 	inityy(&p);
-	initbuf(&p, NULL);
+	initbuf(&p);
 	p.tokenbuf = ealloc(p.bufsize);
 
 	result = yyparse(&p);
