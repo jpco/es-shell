@@ -319,11 +319,6 @@ extern void initprims(void);
 extern List *primswithprefix(const char *prefix);
 
 
-/* prim-readline.c */
-
-extern void inithistory(void);
-
-
 /* split.c */
 
 extern void startsplit(const char *sep, Boolean coalesce);

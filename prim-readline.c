@@ -14,7 +14,7 @@
 
 static Boolean reloadhistory = FALSE;
 static Boolean resetterminal = FALSE;
-static char *history;
+static char *history = NULL;
 
 #if 0
 /* These split history file entries by timestamp, which allows readline to pick up
@@ -83,7 +83,16 @@ static void reload_history(void) {
 	reloadhistory = FALSE;
 }
 
+static void inithistory(void) {
+	static Boolean initialized = FALSE;
+	if (initialized)
+		return;
+	globalroot(&history);
+	initialized = TRUE;
+}
+
 extern void sethistory(char *file) {
+	inithistory();
 	if (reloadhistory)
 		reload_history();
 	reloadhistory = TRUE;
@@ -458,11 +467,5 @@ extern Dict *initprims_readline(Dict *primdict) {
 	X(readline);
 
 	return primdict;
-}
-
-/* inithistory -- called at dawn of time from main() */
-extern void inithistory(void) {
-	/* declare the global roots */
-	globalroot(&history);		/* history file */
 }
 #endif
