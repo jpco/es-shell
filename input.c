@@ -16,7 +16,7 @@
  * globals
  */
 
-static Input *input;
+static Input *input = NULL;
 
 
 /*
