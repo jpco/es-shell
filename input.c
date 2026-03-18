@@ -48,7 +48,7 @@ static void warn(Input *in, char *s) {
 
 /* fill -- fill input buffer by running a command */
 static int fill(Parser *p) {
-	int oldfd;
+	int ticket = UNREGISTERED;
 	List *result;
 	char *read;
 	size_t nread;
@@ -61,11 +61,7 @@ static int fill(Parser *p) {
 		return EOF;
 	}
 
-	oldfd = dup(0);
-	if (dup2(in->fd, 0) == -1) {
-		close(oldfd);
-		fail("$&parse", "dup2: %s", esstrerror(errno));
-	}
+	ticket = defer_mvfd(TRUE, dup(in->fd), 0);
 
 	ExceptionHandler
 
@@ -76,12 +72,12 @@ static int fill(Parser *p) {
 
 	CatchException (e)
 
-		mvfd(oldfd, 0);
+		undefer(ticket);
 		throw(e);
 
 	EndExceptionHandler
 
-	mvfd(oldfd, 0);
+	undefer(ticket);
 
 	if (result == NULL) {	/* eof */
 		in->eof = TRUE;

@@ -1,4 +1,4 @@
-/* prim-readline.c -- control the history file ($Revision: 1.1.1.1 $) */
+/* prim-readline.c -- readline integration, including history */
 
 #include "es.h"
 #include "prim.h"
@@ -443,9 +443,25 @@ PRIM(readline) {
 	if (list != NULL && list->next != NULL)
 		fail("$&readline", "usage: %read-line [prompt]");
 
-	do {
-		line = callreadline(prompt);
-	} while (line == NULL && errno == EINTR);
+	rl_instream = fdopen(dup(fdmap(0)), "r");
+	rl_outstream = fdopen(dup(fdmap(1)), "w");
+
+	ExceptionHandler
+
+		do {
+			line = callreadline(prompt);
+		} while (line == NULL && errno == EINTR);
+
+	CatchException (e)
+
+		fclose(rl_instream);
+		fclose(rl_outstream);
+		throw(e);
+
+	EndExceptionHandler
+
+	fclose(rl_instream);
+	fclose(rl_outstream);
 
 	if (line == NULL)
 		return NULL;
