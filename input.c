@@ -48,7 +48,6 @@ static void warn(Input *in, char *s) {
 
 /* fill -- fill input buffer by running a command */
 static int fill(Parser *p) {
-	int ticket = UNREGISTERED;
 	List *result;
 	char *read;
 	size_t nread;
@@ -56,28 +55,10 @@ static int fill(Parser *p) {
 
 	assert(p->buf == p->bufend);
 
-	if (in->fd < 0) {
-		in->eof = TRUE;
-		return EOF;
-	}
-
-	ticket = defer_mvfd(TRUE, dup(in->fd), 0);
-
-	ExceptionHandler
-
-		if (p->reader != NULL)
-			result = eval(p->reader, NULL, 0);
-		else
-			result = prim("read", NULL, 0);
-
-	CatchException (e)
-
-		undefer(ticket);
-		throw(e);
-
-	EndExceptionHandler
-
-	undefer(ticket);
+	if (p->reader != NULL)
+		result = eval(p->reader, NULL, 0);
+	else
+		result = prim("read", NULL, 0);
 
 	if (result == NULL) {	/* eof */
 		in->eof = TRUE;
@@ -128,10 +109,10 @@ static void initbuf(Parser *p) {
 }
 
 /*
- * parse -- call yyparse(), but disable garbage collection and catch errors
+ * parse -- wrapper around yyparse()
  */
 extern Tree *parse(List *reader) {
-	int result;
+	int result, fd, ticket = UNREGISTERED;
 	Parser p;
 	void *oldpspace;
 
@@ -151,7 +132,25 @@ extern Tree *parse(List *reader) {
 	initbuf(&p);
 	p.tokenbuf = ealloc(p.bufsize);
 
-	result = yyparse(&p);
+	fd = (input->fd == -1)
+		? eopen("/dev/null", oOpen)
+		: dup(input->fd);
+	ticket = defer_mvfd(TRUE, fd, 0);
+
+	ExceptionHandler
+
+		result = yyparse(&p);
+
+	CatchException (e)
+
+		undefer(ticket);
+		pseal(NULL);
+		setpspace(oldpspace);
+		throw(e);
+
+	EndExceptionHandler
+
+	undefer(ticket);
 
 	RefRemove(p.reader);
 	assert(p.ungot == 0);
