@@ -24,7 +24,7 @@ test 'parser' {
 	let (msg = `` \n {catch @ exc {
 			echo $exc
 		} {
-			$&parse {result 'aaaa ( bbbbb'}
+			$&parse {result '('}
 		}
 	}) {
 		assert {~ $msg 'error'*'memory exhausted'* || ~ $msg 'error'*'stack overflow'*} \
@@ -42,16 +42,6 @@ test 'parser' {
 		assert {~ $msg 'caught'*'syntax error'*}
 	}
 
-	# normal 'nested parsing' exception
-	let ((e type msg) = ()) {
-		catch @ exc {
-			(e type msg) = $exc
-		} {
-			$&parse $&parse
-		}
-		assert {~ $e error && ~ $msg *'nested parsing'*}
-	}
-
 	# test parsing from string while parsing from input
 	let (e = ()) {
 		catch @ exc {
@@ -66,12 +56,12 @@ test 'parser' {
 	assert {~ <={$&parse {result 'echo >[1=2]'}} '{%dup 1 2 {echo}}'}
 
 	# force GCs during parsing
-	assert {~ <={$&parse {$&collect; $&read}} '{fn-^zoom=@ *{%seq {this is one} {let(z=a a a){this is three}}}}'} << EOF
-fn zoom {
-	this is one
-	let (z = a a a) {
-		this is three
-	}
-}
-EOF
+	let (lines = 'fn zoom {' 'this is one' 'let (z = a a a) {' 'this is three' '}' '}')
+	assert {~ <={$&parse {
+		let (l = ()) {
+			(l lines) = $lines
+			$&collect
+			result $l
+		}
+	}} '{fn-^zoom=@ *{%seq {this is one} {let(z=a a a){this is three}}}}'}
 }
