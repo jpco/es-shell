@@ -440,10 +440,14 @@ PRIM(resetterminal) {
 PRIM(readline) {
 	char *line;
 	char *prompt = (list == NULL ? "" : getstr(list->term));
+	int input = fdmap(0);
 	if (list != NULL && list->next != NULL)
 		fail("$&readline", "usage: %read-line [prompt]");
 
-	rl_instream = fdopen(dup(fdmap(0)), "r");
+	if (!isatty(input))
+		return prim("read", NULL, 0);
+
+	rl_instream = fdopen(dup(input), "r");
 	rl_outstream = fdopen(dup(fdmap(1)), "w");
 
 	ExceptionHandler
