@@ -452,7 +452,7 @@ PRIM(read) {
 #endif
 		while ((c = read1(fd)) != EOF && c != '\n')
 			if (c == '\0')
-				fail("$&read", "%%read: null character encountered");
+				eprint("%%read: null character ignored\n");
 			else
 				buffer = bufputc(buffer, c);
 #if HAVE_LSEEK
@@ -469,7 +469,8 @@ PRIM(read) {
 			}
 			if ((zp = memchr(s, '\0', n)) != NULL) {
 				lseek(fd, 1 + ((zp - s) - n), SEEK_CUR);
-				fail("$&read", "%%read: null character encountered");
+				eprint("%%read: null character ignored\n");
+				n = zp - s;
 			}
 			buffer = bufncat(buffer, s, n);
 			if (np != NULL && *np == '\n')

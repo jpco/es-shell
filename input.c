@@ -36,11 +36,6 @@ extern void yyerror(Parser *p, const char *s) {
 		p->error = locate(p->input, s);
 }
 
-/* warn -- print a warning */
-static void warn(Input *in, char *s) {
-	eprint("warning: %s\n", locate(in, s));
-}
-
 
 /*
  * getting and ungetting characters
@@ -82,8 +77,7 @@ extern int get(Parser *p) {
 	int c;
 	if (p->ungot > 0)
 		return p->unget[--p->ungot];
-	while ((c = (p->buf < p->bufend ? *p->buf++ : fill(p))) == '\0')
-		warn(p->input, "null character ignored");
+	c = p->buf < p->bufend ? *p->buf++ : fill(p);
 	if (c != EOF && p->input->runflags & run_echoinput) {
 		char buf = (char)c;
 		ewrite(2, &buf, 1);
