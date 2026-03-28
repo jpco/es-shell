@@ -304,6 +304,49 @@ PRIM(setmaxevaldepth) {
 }
 
 #if HAVE_READLINE
+#include <readline/readline.h>
+
+PRIM(readline) {
+	char *line;
+	char *prompt = (list == NULL ? "" : getstr(list->term));
+	int input = fdmap(0);
+	if (list != NULL && list->next != NULL)
+		fail("$&readline", "usage: %read-line [prompt]");
+
+	if (!isatty(input)) {
+		list = prim("read", NULL, 0);
+		if (length(list) <= 1)
+			return list;
+		return mklist(mkstr(str("%L", list, "")), NULL);
+	}
+
+	rl_instream = fdopen(dup(input), "r");
+	rl_outstream = fdopen(dup(fdmap(1)), "w");
+
+	ExceptionHandler
+
+		do {
+			line = callreadline(prompt);
+		} while (line == NULL && errno == EINTR);
+
+	CatchException (e)
+
+		fclose(rl_instream);
+		fclose(rl_outstream);
+		throw(e);
+
+	EndExceptionHandler
+
+	fclose(rl_instream);
+	fclose(rl_outstream);
+
+	if (line == NULL)
+		return NULL;
+	list = mklist(mkstr(str("%s", line)), NULL);
+	efree(line);
+	return list;
+}
+
 PRIM(sethistory) {
 	if (list == NULL) {
 		sethistory(NULL);
@@ -373,6 +416,7 @@ extern Dict *initprims_etc(Dict *primdict) {
 	X(noreturn);
 	X(setmaxevaldepth);
 #if HAVE_READLINE
+	X(readline);
 	X(sethistory);
 	X(writehistory);
 	X(resetterminal);

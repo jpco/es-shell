@@ -79,7 +79,7 @@ extern void unget(Parser *p, int c) {
 
 #if HAVE_READLINE
 /* callreadline -- readline wrapper */
-static char *callreadline(char *prompt0) {
+extern char *callreadline(char *prompt0) {
 	char *r;
 	Ref(char *volatile, prompt, prompt0);
 	if (prompt == NULL)
@@ -118,6 +118,8 @@ static int fill(Input *in) {
 #if HAVE_READLINE
 	if (in->runflags & run_interactive && in->fd == 0) {
 		char *rlinebuf = NULL;
+		rl_instream = stdin;
+		rl_outstream = stdout;
 		do {
 			rlinebuf = callreadline(in->prompt);
 		} while (rlinebuf == NULL && errno == EINTR);
