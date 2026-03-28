@@ -321,7 +321,7 @@ PRIM(readline) {
 	}
 
 	rl_instream = fdopen(dup(input), "r");
-	rl_outstream = fdopen(dup(fdmap(1)), "w");
+	rl_outstream = fdopen(dup(fdmap(2)), "w");
 
 	ExceptionHandler
 
