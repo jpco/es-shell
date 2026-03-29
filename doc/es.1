@@ -2800,11 +2800,17 @@ library:
 .ta 2i
 .Ds
 .ft \*(Cf
-resetterminal	sethistory
-setmaxhistorylength	writehistory
+readline	resetterminal
+sethistory	setmaxhistorylength
+writehistory
 .ft R
 .De
 .PP
+.Cr readline
+reads from standard input, using the
+.I readline
+library, taking a single optional prompt argument and returning a string
+containing the line it read or the empty list on EOF.
 .Cr sethistory
 and
 .Cr setmaxhistorylength
