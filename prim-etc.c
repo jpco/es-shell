@@ -303,100 +303,6 @@ PRIM(setmaxevaldepth) {
 	RefReturn(lp);
 }
 
-#if HAVE_READLINE
-#include <readline/readline.h>
-
-static FILE *fdmapopen(int fd, const char *mode) {
-	FILE *f;
-	if ((fd = dup(fdmap(fd))) == -1)
-		fail("$&readline", "dup: %s", esstrerror(errno));
-	if ((f = fdopen(fd, mode)) == NULL) {
-		int err = errno;
-		close(fd);
-		fail("$&readline", "fdopen: %s", esstrerror(err));
-	}
-	return f;
-}
-
-PRIM(readline) {
-	char *line;
-	char *prompt = (list == NULL ? "" : getstr(list->term));
-	if (list != NULL && list->next != NULL)
-		fail("$&readline", "usage: %read-line [prompt]");
-
-	rl_instream = fdmapopen(0, "r");
-	ExceptionHandler
-		rl_outstream = fdmapopen(2, "w");
-	CatchException (e)
-		fclose(rl_instream);
-		throw(e);
-	EndExceptionHandler
-
-	ExceptionHandler
-
-		do {
-			line = callreadline(prompt);
-		} while (line == NULL && errno == EINTR);
-
-	CatchException (e)
-
-		fclose(rl_instream);
-		fclose(rl_outstream);
-		throw(e);
-
-	EndExceptionHandler
-
-	fclose(rl_instream);
-	fclose(rl_outstream);
-
-	if (line == NULL)
-		return NULL;
-	list = mklist(mkstr(str("%s", line)), NULL);
-	efree(line);
-	return list;
-}
-
-PRIM(sethistory) {
-	if (list == NULL) {
-		sethistory(NULL);
-		return NULL;
-	}
-	Ref(List *, lp, list);
-	sethistory(getstr(lp->term));
-	RefReturn(lp);
-}
-
-PRIM(writehistory) {
-	if (list == NULL || list->next != NULL)
-		fail("$&writehistory", "usage: $&writehistory command");
-	loghistory(getstr(list->term));
-	return NULL;
-}
-
-PRIM(setmaxhistorylength) {
-	char *s;
-	int n;
-	if (list == NULL) {
-		setmaxhistorylength(-1); /* unlimited */
-		return NULL;
-	}
-	if (list->next != NULL)
-		fail("$&setmaxhistorylength", "usage: $&setmaxhistorylength [limit]");
-	Ref(List *, lp, list);
-	n = (int)strtol(getstr(lp->term), &s, 0);
-	if (n < 0 || (s != NULL && *s != '\0'))
-		fail("$&setmaxhistorylength", "max-history-length must be set to a positive integer");
-	setmaxhistorylength(n);
-	RefReturn(lp);
-}
-
-PRIM(resetterminal) {
-	resetterminal = TRUE;
-	return ltrue;
-}
-#endif
-
-
 /*
  * initialization
  */
@@ -424,12 +330,5 @@ extern Dict *initprims_etc(Dict *primdict) {
 	X(exitonfalse);
 	X(noreturn);
 	X(setmaxevaldepth);
-#if HAVE_READLINE
-	X(readline);
-	X(sethistory);
-	X(writehistory);
-	X(resetterminal);
-	X(setmaxhistorylength);
-#endif
 	return primdict;
 }

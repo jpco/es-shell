@@ -304,14 +304,13 @@ extern List *runstring(const char *str, const char *name, int flags);
 #define	run_printcmds		32	/* -x */
 #define	run_lisptrees		64	/* -L and defined(LISPTREES) */
 
+
 #if HAVE_READLINE
+/* readline.c */
+
 extern Boolean resetterminal;
 extern char *callreadline(char *prompt);
-#endif
 
-
-/* history.c */
-#if HAVE_READLINE
 extern void inithistory(void);
 
 extern void sethistory(char *file);
@@ -320,6 +319,8 @@ extern void setmaxhistorylength(int length);
 extern void checkhistory(void);
 #endif
 
+
+/* history.c */
 extern void newhistbuffer(void);
 extern void addhistbuffer(char c);
 extern char *dumphistbuffer(void);

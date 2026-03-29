@@ -177,11 +177,6 @@ getopt_done:
 
 	ExceptionHandler
 		roothandler = &_localhandler;	/* unhygeinic */
-
-		initinput();
-#if HAVE_READLINE
-		inithistory();
-#endif
 		initprims();
 		initvars();
 
