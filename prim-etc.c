@@ -306,22 +306,31 @@ PRIM(setmaxevaldepth) {
 #if HAVE_READLINE
 #include <readline/readline.h>
 
+static FILE *fdmapopen(int fd, const char *mode) {
+	FILE *f;
+	if ((fd = dup(fdmap(fd))) == -1)
+		fail("$&readline", "dup: %s", esstrerror(errno));
+	if ((f = fdopen(fd, mode)) == NULL) {
+		int err = errno;
+		close(fd);
+		fail("$&readline", "fdopen: %s", esstrerror(err));
+	}
+	return f;
+}
+
 PRIM(readline) {
 	char *line;
 	char *prompt = (list == NULL ? "" : getstr(list->term));
-	int input = fdmap(0);
 	if (list != NULL && list->next != NULL)
 		fail("$&readline", "usage: %read-line [prompt]");
 
-	if (!isatty(input)) {
-		list = prim("read", NULL, 0);
-		if (length(list) <= 1)
-			return list;
-		return mklist(mkstr(str("%L", list, "")), NULL);
-	}
-
-	rl_instream = fdopen(dup(input), "r");
-	rl_outstream = fdopen(dup(fdmap(2)), "w");
+	rl_instream = fdmapopen(0, "r");
+	ExceptionHandler
+		rl_outstream = fdmapopen(2, "w");
+	CatchException (e)
+		fclose(rl_instream);
+		throw(e);
+	EndExceptionHandler
 
 	ExceptionHandler
 
