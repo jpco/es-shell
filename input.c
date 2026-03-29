@@ -332,5 +332,5 @@ extern Boolean isinteractive(void) {
 
 /* isfromfd -- is the innermost input source reading from a file descriptor? */
 extern Boolean isfromfd(void) {
-	return input == NULL ? FALSE : input->fd >= 0;
+	return input == NULL ? FALSE : (input->fd >= 0);
 }

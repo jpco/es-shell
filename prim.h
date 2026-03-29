@@ -20,3 +20,6 @@ extern Dict *initprims_readline(Dict *primdict);	/* prim-readline.c */
 extern Dict *initprims_sys(Dict *primdict);		/* prim-sys.c */
 extern Dict *initprims_proc(Dict *primdict);		/* proc.c */
 extern Dict *initprims_access(Dict *primdict);		/* access.c */
+#if HAVE_READLINE
+extern Dict *initprims_readline(Dict *primdict);	/* readline.c */
+#endif

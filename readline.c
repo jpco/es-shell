@@ -1,16 +1,17 @@
-/* prim-readline.c -- readline integration, including history */
+/* readline.c -- readline primitives */
 
 #include "es.h"
 #include "prim.h"
+
+#if HAVE_READLINE
+
+#include <readline/readline.h>
+#include <readline/history.h>
 
 
 /*
  * globals
  */
-
-#if HAVE_READLINE
-#include <readline/readline.h>
-#include <readline/history.h>
 
 static Boolean reloadhistory = FALSE;
 static Boolean resetterminal = FALSE;
@@ -24,8 +25,9 @@ static int history_write_timestamps = 1;
 static char history_comment_char = '#';
 #endif
 
+
 /*
- * history
+ * history functions
  */
 
 static int sethistorylength = -1; /* unlimited */
@@ -120,7 +122,7 @@ extern void checkhistory(void) {
 
 
 /*
- * readline
+ * readline functions
  */
 
 /* quote -- teach readline how to quote a word during completion.
@@ -257,7 +259,7 @@ static rl_compentry_func_t *completion_func = NULL;
 
 /* Top-level completion function.  If completion_func is set, performs that completion.
  * Otherwise, performs a completion based on the prefix of the text. */
-static char **builtin_completion(const char *text, int UNUSED start, int UNUSED end) {
+char **builtin_completion(const char *text, int UNUSED start, int UNUSED end) {
 	char **matches = NULL, *qp = NULL, *prefix = "";
 	/* Manually unquote the text, since we told readline not to. */
 	char *t = unquote(text, &qp);
@@ -359,7 +361,7 @@ static void initreadline(void) {
 	rl_bind_keyseq("\033$", es_complete_variable);
 }
 
-static void preprl(void) {
+static void prepreadline(void) {
 	static Boolean initialized = FALSE;
 	if (!initialized) {
 		initreadline();
@@ -374,10 +376,11 @@ static void preprl(void) {
 		rl_reset_screen_size();
 }
 
-extern char *callreadline(char *prompt0) {
+/* callreadline -- readline wrapper */
+static char *callreadline(char *prompt0) {
 	char *r;
 	Ref(char *volatile, prompt, prompt0);
-	preprl();
+	prepreadline();
 	if (prompt == NULL)
 		prompt = ""; /* bug fix for readline 2.0 */
 	if (!sigsetjmp(slowlabel, 1)) {
@@ -393,10 +396,60 @@ extern char *callreadline(char *prompt0) {
 	return r;
 }
 
+static FILE *fdmapopen(int fd, const char *mode) {
+	FILE *f;
+	if ((fd = dup(fdmap(fd))) == -1)
+		fail("$&readline", "dup: %s", esstrerror(errno));
+	if ((f = fdopen(fd, mode)) == NULL) {
+		int err = errno;
+		close(fd);
+		fail("$&readline", "fdopen: %s", esstrerror(err));
+	}
+	return f;
+}
+
 
 /*
  * primitive interface
  */
+
+PRIM(readline) {
+	char *line;
+	char *prompt = (list == NULL ? "" : getstr(list->term));
+	if (list != NULL && list->next != NULL)
+		fail("$&readline", "usage: %read-line [prompt]");
+
+	rl_instream = fdmapopen(0, "r");
+	ExceptionHandler
+		rl_outstream = fdmapopen(2, "w");
+	CatchException (e)
+		fclose(rl_instream);
+		throw(e);
+	EndExceptionHandler
+
+	ExceptionHandler
+
+		do {
+			line = callreadline(prompt);
+		} while (line == NULL && errno == EINTR);
+
+	CatchException (e)
+
+		fclose(rl_instream);
+		fclose(rl_outstream);
+		throw(e);
+
+	EndExceptionHandler
+
+	fclose(rl_instream);
+	fclose(rl_outstream);
+
+	if (line == NULL)
+		return NULL;
+	list = mklist(mkstr(str("%s", line)), NULL);
+	efree(line);
+	return list;
+}
 
 PRIM(sethistory) {
 	if (list == NULL) {
@@ -437,55 +490,12 @@ PRIM(resetterminal) {
 	return ltrue;
 }
 
-PRIM(readline) {
-	char *line;
-	char *prompt = (list == NULL ? "" : getstr(list->term));
-	int input = fdmap(0);
-	if (list != NULL && list->next != NULL)
-		fail("$&readline", "usage: %read-line [prompt]");
-
-	if (!isatty(input))
-		return prim("read", NULL, 0);
-
-	rl_instream = fdopen(dup(input), "r");
-	rl_outstream = fdopen(dup(fdmap(1)), "w");
-
-	ExceptionHandler
-
-		do {
-			line = callreadline(prompt);
-		} while (line == NULL && errno == EINTR);
-
-	CatchException (e)
-
-		fclose(rl_instream);
-		fclose(rl_outstream);
-		throw(e);
-
-	EndExceptionHandler
-
-	fclose(rl_instream);
-	fclose(rl_outstream);
-
-	if (line == NULL)
-		return NULL;
-	list = mklist(mkstr(str("%s", line)), NULL);
-	efree(line);
-	return list;
-}
-
-
-/*
- * initialization
- */
-
 extern Dict *initprims_readline(Dict *primdict) {
+	X(readline);
 	X(sethistory);
 	X(writehistory);
 	X(resetterminal);
 	X(setmaxhistorylength);
-	X(readline);
-
 	return primdict;
 }
 #endif

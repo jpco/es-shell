@@ -1,4 +1,4 @@
-#!/usr/local/bin/es
+# read.es -- test that reading handles edge cases
 
 test 'null reading' {
 	let (tmp = `{mktemp test-nul.XXXXXX})
@@ -8,21 +8,63 @@ test 'null reading' {
 
 		let (first = (); second = ()) {
 			{
+				first = <=$&read
+				second = <=$&read
+			} < $tmp
+			assert {~ $first 'first line'} '$&read reads valid line'
+			assert {~ $second(1) 're'} '$&read reads line with zero (1)'
+			assert {~ $second(2) 'sult 6'} '$&read reads line with zero (2)'
+		}
+
+		let (first = (); second = ()) {
+			{
 				first = <=%read
 				second = <=%read
-			} < $tmp >[2] /dev/null
-			assert {~ $first 'first line'} 'read reads valid line'
-			assert {~ $second 'result 6'} 'read reads line with zero'
+			} < $tmp
+			assert {~ $first 'first line'} '%read reads valid line'
+			assert {~ $second 'result 6'} '%read reads line with zero'
 		}
 
 		let ((first second) = `` \n {
 			let (fl = ())
-			cat $tmp | {echo <=%read^\n^<=%read} >[2] /dev/null
+			cat $tmp | {echo <=$&read; echo <=$&read}
 		}) {
-			assert {~ $first 'first line'} 'pipe read reads valid line'
-			assert {~ $second 'result 6'} 'pipe read reads line with zero'
+			assert {~ $first 'first line'} 'pipe $&read reads valid line'
+			assert {~ $second 're sult 6'} 'pipe $&read reads line with zero'
+		}
+
+		let ((first second) = `` \n {
+			let (fl = ())
+			cat $tmp | {echo <=%read; echo <=%read}
+		}) {
+			assert {~ $first 'first line'} 'pipe %read reads valid line'
+			assert {~ $second 'result 6'} 'pipe %read reads line with zero'
+		}
+
+
+		if {~ <=$&primitives readline} {
+			let (first = (); second = ()) {
+				{
+					first = <=$&readline
+					second = <=$&readline
+				} < $tmp >[2] /dev/null  # hush the echoing
+				assert {~ $first 'first line'} 'read reads valid line'
+				assert {~ $second 'result 6'} 'read reads line with zero'
+			}
 		}
 	} {
 		rm -f $tmp
+	}
+}
+
+test 'fd error handling' {
+	assert {catch @ {true}  {$&read <<< '' <[0=]; false}}
+	assert {catch @ {false} {$&read <<< '' >[1=]; true}}
+	assert {catch @ {false} {$&read <<< '' >[2=]; true}}
+
+	if {~ <=$&primitives readline} {
+		assert {catch @ {true}  {$&readline <<< '' <[0=]; false}}
+		assert {catch @ {false} {$&readline <<< '' >[1=]; true}}
+		assert {catch @ {true}  {$&readline <<< '' >[2=]; false}}
 	}
 }
