@@ -419,6 +419,13 @@ PRIM(readline) {
 	if (list != NULL && list->next != NULL)
 		fail("$&readline", "usage: %read-line [prompt]");
 
+	if (!isatty(fdmap(0))) {
+		list = prim("read", NULL, 0);
+		if (length(list) <= 1)
+			return list;
+		return mklist(mkstr(str("%L", list, "")), NULL);
+	}
+
 	rl_instream = fdmapopen(0, "r");
 	ExceptionHandler
 		rl_outstream = fdmapopen(2, "w");
