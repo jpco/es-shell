@@ -55,9 +55,11 @@ static int fill(Parser *p) {
 		read = str("%L\n", result, " ");
 	} else {
 		result = prim("read", NULL, 0);
-		read = str("%L\n", result, "");
+		RefAdd(result);
 		if (length(result) > 1)
 			eprint("%s\n", locate(in, "null character ignored"));
+		read = str("%L\n", result, "");
+		RefRemove(result);
 	}
 	if (result == NULL) {	/* eof */
 		in->eof = TRUE;
