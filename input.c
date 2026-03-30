@@ -50,16 +50,19 @@ static int fill(Parser *p) {
 
 	assert(p->buf == p->bufend);
 
-	if (p->reader != NULL)
+	if (p->reader != NULL) {
 		result = eval(p->reader, NULL, 0);
-	else
+		read = str("%L\n", result, " ");
+	} else {
 		result = prim("read", NULL, 0);
-
+		read = str("%L\n", result, "");
+		if (length(result) > 1)
+			eprint("%s\n", locate(in, "null character ignored"));
+	}
 	if (result == NULL) {	/* eof */
 		in->eof = TRUE;
 		return EOF;
 	}
-	read = str("%L\n", result, " ");
 	if ((nread = strlen(read)) > p->buflen) {
 		p->bufbegin = erealloc(p->bufbegin, nread);
 		p->buflen = nread;
