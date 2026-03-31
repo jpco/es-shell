@@ -8,8 +8,14 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
-Boolean reloadhistory = FALSE;
-static char *history;
+
+/*
+ * globals
+ */
+
+static Boolean reloadhistory = FALSE;
+static Boolean resetterminal = FALSE;
+static char *history = NULL;
 
 #if 0
 /* These split history file entries by timestamp, which allows readline to pick up
@@ -18,6 +24,7 @@ static char *history;
 static int history_write_timestamps = 1;
 static char history_comment_char = '#';
 #endif
+
 
 /*
  * history functions
@@ -78,7 +85,16 @@ static void reload_history(void) {
 	reloadhistory = FALSE;
 }
 
+static void inithistory(void) {
+	static Boolean initialized = FALSE;
+	if (initialized)
+		return;
+	globalroot(&history);
+	initialized = TRUE;
+}
+
 extern void sethistory(char *file) {
+	inithistory();
 	if (reloadhistory)
 		reload_history();
 	reloadhistory = TRUE;
@@ -106,7 +122,7 @@ extern void checkhistory(void) {
 
 
 /*
- * readline library functions
+ * readline functions
  */
 
 /* quote -- teach readline how to quote a word during completion.
@@ -324,12 +340,33 @@ static int es_complete_primitive(int UNUSED count, int UNUSED key) {
 	return rl_complete_internal(rl_completion_mode(es_complete_primitive));
 }
 
-/* callreadline -- readline wrapper */
-extern char *callreadline(char *prompt0) {
-	char *r;
-	Ref(char *volatile, prompt, prompt0);
-	if (prompt == NULL)
-		prompt = ""; /* bug fix for readline 2.0 */
+static void initreadline(void) {
+	rl_readline_name = "es";
+
+	/* this word_break_characters excludes '&' due to primitive completion */
+	rl_basic_word_break_characters = " \t\n`$><=;|{()}";
+	rl_filename_quote_characters = " \t\n\\`'$><=;|&{()}";
+	rl_basic_quote_characters = "";
+	rl_special_prefixes = "$";
+
+	rl_completion_word_break_hook = completion_start;
+	rl_filename_stat_hook = unquote_for_stat;
+	rl_attempted_completion_function = builtin_completion;
+	rl_completion_display_matches_hook = display_matches;
+
+	rl_add_funmap_entry("es-complete-filename", es_complete_filename);
+	rl_add_funmap_entry("es-complete-variable", es_complete_variable);
+	rl_add_funmap_entry("es-complete-primitive", es_complete_primitive);
+	rl_bind_keyseq("\033/", es_complete_filename);
+	rl_bind_keyseq("\033$", es_complete_variable);
+}
+
+static void prepreadline(void) {
+	static Boolean initialized = FALSE;
+	if (!initialized) {
+		initreadline();
+		initialized = TRUE;
+	}
 	checkhistory();
 	if (resetterminal) {
 		rl_reset_terminal(NULL);
@@ -337,6 +374,15 @@ extern char *callreadline(char *prompt0) {
 	}
 	if (RL_ISSTATE(RL_STATE_INITIALIZED))
 		rl_reset_screen_size();
+}
+
+/* callreadline -- readline wrapper */
+static char *callreadline(char *prompt0) {
+	char *r;
+	Ref(char *volatile, prompt, prompt0);
+	prepreadline();
+	if (prompt == NULL)
+		prompt = ""; /* bug fix for readline 2.0 */
 	if (!sigsetjmp(slowlabel, 1)) {
 		slow = TRUE;
 		r = readline(prompt);
@@ -372,6 +418,13 @@ PRIM(readline) {
 	char *prompt = (list == NULL ? "" : getstr(list->term));
 	if (list != NULL && list->next != NULL)
 		fail("$&readline", "usage: %read-line [prompt]");
+
+	if (!isatty(fdmap(0))) {
+		list = prim("read", NULL, 0);
+		if (length(list) <= 1)
+			return list;
+		return mklist(mkstr(str("%L", list, "")), NULL);
+	}
 
 	rl_instream = fdmapopen(0, "r");
 	ExceptionHandler
@@ -444,39 +497,12 @@ PRIM(resetterminal) {
 	return ltrue;
 }
 
-
-/*
- * initialization
- */
-
 extern Dict *initprims_readline(Dict *primdict) {
-	rl_readline_name = "es";
-
-	/* this word_break_characters excludes '&' due to primitive completion */
-	rl_basic_word_break_characters = " \t\n`$><=;|{()}";
-	rl_filename_quote_characters = " \t\n\\`'$><=;|&{()}";
-	rl_basic_quote_characters = "";
-	rl_special_prefixes = "$";
-
-	rl_completion_word_break_hook = completion_start;
-	rl_filename_stat_hook = unquote_for_stat;
-	rl_attempted_completion_function = builtin_completion;
-	rl_completion_display_matches_hook = display_matches;
-
-	rl_add_funmap_entry("es-complete-filename", es_complete_filename);
-	rl_add_funmap_entry("es-complete-variable", es_complete_variable);
-	rl_add_funmap_entry("es-complete-primitive", es_complete_primitive);
-	rl_bind_keyseq("\033/", es_complete_filename);
-	rl_bind_keyseq("\033$", es_complete_variable);
-
-	globalroot(&history);		/* history file */
-
 	X(readline);
 	X(sethistory);
 	X(writehistory);
 	X(resetterminal);
 	X(setmaxhistorylength);
-
 	return primdict;
 }
 #endif

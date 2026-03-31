@@ -149,54 +149,16 @@ PRIM(var) {
 	return list;
 }
 
-static void loginput(char *input) {
-	char *c;
-	List *fn = varlookup("fn-%write-history", NULL);
-	if (!isinteractive() || !isfromfd() || fn == NULL)
-		return;
-	for (c = input;; c++)
-		switch (*c) {
-		case '#': case '\n': return;
-		case ' ': case '\t': break;
-		default: goto writeit;
-		}
-writeit:
-	gcdisable();
-	Ref(List *, list, append(fn, mklist(mkstr(input), NULL)));
-	gcenable();
-	eval(list, NULL, 0);
-	RefEnd(list);
-}
-
 PRIM(parse) {
 	List *result;
-	Ref(char *, prompt1, NULL);
-	Ref(char *, prompt2, NULL);
-	Ref(List *, lp, list);
-	if (lp != NULL) {
-		prompt1 = getstr(lp->term);
-		if ((lp = lp->next) != NULL)
-			prompt2 = getstr(lp->term);
-	}
-	RefEnd(lp);
-	newhistbuffer();
-
+	Ref(List *, reader, list);
 	Ref(Tree *, tree, NULL);
-	ExceptionHandler
-		tree = parse(prompt1, prompt2);
-	CatchException (ex)
-		Ref(List *, e, ex);
-		loginput(dumphistbuffer());
-		throw(e);
-		RefEnd(e);
-	EndExceptionHandler
-
-	loginput(dumphistbuffer());
+	tree = parse(reader);
 	result = (tree == NULL)
 		   ? NULL
 		   : mklist(mkterm(NULL, mkclosure(gcmk(nThunk, tree), NULL)),
 			    NULL);
-	RefEnd3(tree, prompt2, prompt1);
+	RefEnd2(tree, reader);
 	return result;
 }
 
@@ -302,6 +264,7 @@ PRIM(setmaxevaldepth) {
 	maxevaldepth = n;
 	RefReturn(lp);
 }
+
 
 /*
  * initialization

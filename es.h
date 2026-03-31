@@ -288,14 +288,13 @@ extern Boolean streq2(const char *s, const char *t1, const char *t2);
 
 /* input.c */
 
-extern Tree *parse(char *prompt1, char *prompt2);
+extern Tree *parse(List *reader);
 extern Tree *parsestring(const char *str);
 extern Boolean isinteractive(void);
 extern Boolean isfromfd(void);
-extern void initinput(void);
 
 extern List *runfd(int fd, const char *name, int flags);
-extern List *runstring(const char *str, const char *name, int flags);
+extern List *runstring(const char *str, int flags);
 
 /* eval_* flags are also understood as runflags */
 #define	run_interactive		 4	/* -i or $0[0] = '-' */
@@ -303,27 +302,6 @@ extern List *runstring(const char *str, const char *name, int flags);
 #define	run_echoinput		16	/* -v */
 #define	run_printcmds		32	/* -x */
 #define	run_lisptrees		64	/* -L and defined(LISPTREES) */
-
-
-#if HAVE_READLINE
-/* readline.c */
-
-extern Boolean resetterminal;
-extern char *callreadline(char *prompt);
-
-extern void inithistory(void);
-
-extern void sethistory(char *file);
-extern void loghistory(char *cmd);
-extern void setmaxhistorylength(int length);
-extern void checkhistory(void);
-#endif
-
-
-/* history.c */
-extern void newhistbuffer(void);
-extern void addhistbuffer(char c);
-extern char *dumphistbuffer(void);
 
 
 /* opt.c */

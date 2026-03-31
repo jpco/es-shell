@@ -76,6 +76,7 @@ test 'fd error handling' {
 	if {~ <=$&primitives readline} {
 		assert {catch @ {true}  {$&readline <<< '' <[0=]; false}}
 		assert {catch @ {false} {$&readline <<< '' >[1=]; true}}
-		assert {catch @ {true}  {$&readline <<< '' >[2=]; false}}
+		# Only while $&read fallback is performed
+		assert {catch @ {false}  {$&readline <<< '' >[2=]; true}}
 	}
 }

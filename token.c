@@ -57,23 +57,11 @@ const char dnw[] = {
 };
 
 
-/* print_prompt2 -- called before all continuation lines */
-extern void print_prompt2(Parser *p) {
-	Input *in = p->input;
-	in->lineno++;
-#if HAVE_READLINE
-	in->prompt = in->prompt2;
-#else
-	if ((p->input->runflags & run_interactive) && in->prompt2 != NULL)
-		eprint("%s", in->prompt2);
-#endif
-}
-
 /* scanerror -- called for lexical errors */
 static void scanerror(Parser *p, int c, char *s) {
 	while (c != '\n' && c != EOF)
 		c = get(p);
-	p->goterror = TRUE;
+	unget(p, '\n');
 	yyerror(p, s);
 }
 
@@ -140,19 +128,9 @@ extern int yylex(YYSTYPE *y, Parser *p) {
 	const char *meta;		/* allow optimizing compilers like gcc to load these	*/
 	char *buf = p->tokenbuf;	/* values into registers. */
 
-	if (p->goterror) {
-		p->goterror = FALSE;
-		return NL;
-	}
-
 	/* rc variable-names may contain only alnum, '*' and '_', so use dnw if we are scanning one. */
 	meta = (p->dollar ? dnw : nw);
 	p->dollar = FALSE;
-	if (p->newline) {
-		--p->input->lineno; /* slight space optimization; print_prompt2() always increments lineno */
-		print_prompt2(p);
-		p->newline = FALSE;
-	}
 top:	while ((c = get(p)) == ' ' || c == '\t')
 		p->ws = NW;
 	if (c == EOF)
@@ -224,7 +202,7 @@ top:	while ((c = get(p)) == ' ' || c == '\t')
 		while ((c = get(p)) != '\'' || (c = get(p)) == '\'') {
 			buf[i++] = c;
 			if (c == '\n')
-				print_prompt2(p);
+				p->input->lineno++;
 			if (c == EOF) {
 				p->ws = NW;
 				scanerror(p, c, "eof in quoted string");
@@ -239,7 +217,7 @@ top:	while ((c = get(p)) == ' ' || c == '\t')
 		return QWORD;
 	case '\\':
 		if ((c = get(p)) == '\n') {
-			print_prompt2(p);
+			p->input->lineno++;
 			unget(p, ' ');
 			goto top; /* Pretend it was just another space. */
 		}
@@ -306,7 +284,6 @@ top:	while ((c = get(p)) == ' ' || c == '\t')
 		FALLTHROUGH;
 	case '\n':
 		p->input->lineno++;
-		p->newline = TRUE;
 		p->ws = NW;
 		return NL;
 	case '(':
@@ -402,7 +379,7 @@ top:	while ((c = get(p)) == ' ' || c == '\t')
 }
 
 extern void inityy(Parser *p) {
-	p->newline = p->dollar = p->goterror = FALSE;
+	p->dollar = FALSE;
 	p->ws = NW;
 	p->bufsize = BUFSIZE;
 }

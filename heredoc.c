@@ -43,7 +43,7 @@ extern Tree *snarfheredoc(Parser *p, const char *eof, Boolean quoted) {
 
 	for (tree = NULL, tailp = &tree, buf = openbuffer(0);;) {
 		int c;
-		print_prompt2(p);
+		p->input->lineno++;
 		for (s = (unsigned char *) eof; (c = get(p)) == *s; s++)
 			;
 		if (*s == '\0' && (c == '\n' || c == EOF)) {

@@ -17,11 +17,6 @@
  */
 
 static Input *input = NULL;
-Boolean resetterminal = FALSE;	/* TODO: localize to readline code */
-
-#if HAVE_READLINE
-#include <readline/readline.h>
-#endif
 
 
 /*
@@ -41,32 +36,56 @@ extern void yyerror(Parser *p, const char *s) {
 		p->error = locate(p->input, s);
 }
 
-/* warn -- print a warning */
-static void warn(Input *in, char *s) {
-	eprint("warning: %s\n", locate(in, s));
-}
-
 
 /*
  * getting and ungetting characters
  */
 
-static int fill(Input *in);
-static void cleanup(Input *in);
+/* fill -- fill input buffer by running a command */
+static int fill(Parser *p) {
+	List *result;
+	char *read;
+	size_t nread;
+	Input *in = p->input;
+
+	assert(p->buf == p->bufend);
+
+	if (p->reader != NULL) {
+		result = eval(p->reader, NULL, 0);
+		read = str("%L\n", result, " ");
+	} else {
+		result = prim("read", NULL, 0);
+		RefAdd(result);
+		if (length(result) > 1)
+			eprint("%s\n", locate(in, "null character ignored"));
+		read = str("%L\n", result, "");
+		RefRemove(result);
+	}
+	if (result == NULL) {	/* eof */
+		in->eof = TRUE;
+		return EOF;
+	}
+	if ((nread = strlen(read)) > p->buflen) {
+		p->bufbegin = erealloc(p->bufbegin, nread);
+		p->buflen = nread;
+	}
+	memcpy(p->bufbegin, read, nread);
+
+	p->buf = p->bufbegin;
+	p->bufend = &p->buf[nread];
+
+	return *p->buf++;
+}
 
 /* get -- get a character, filter out nulls */
 extern int get(Parser *p) {
 	int c;
-	Input *in = p->input;
 	if (p->ungot > 0)
 		return p->unget[--p->ungot];
-	while ((c = (in->buf < in->bufend ? *in->buf++ : fill(in))) == '\0')
-		warn(in, "null character ignored");
-	if (c != EOF) {
-		char buf = c;
-		addhistbuffer(buf);
-		if (p->input->runflags & run_echoinput)
-			ewrite(2, &buf, 1);
+	c = p->buf < p->bufend ? *p->buf++ : fill(p);
+	if (c != EOF && p->input->runflags & run_echoinput) {
+		char buf = (char)c;
+		ewrite(2, &buf, 1);
 	}
 	return c;
 }
@@ -77,65 +96,22 @@ extern void unget(Parser *p, int c) {
 	p->unget[p->ungot++] = c;
 }
 
-
-
-static int fill(Input *in) {
-	long nread;
-	assert(in->buf == in->bufend);
-
-	if (in->fd < 0) {
-		in->eof = TRUE;
-		return EOF;
-	}
-
-#if HAVE_READLINE
-	if (in->runflags & run_interactive && in->fd == 0) {
-		char *rlinebuf = NULL;
-		rl_instream = stdin;
-		rl_outstream = stdout;
-		do {
-			rlinebuf = callreadline(in->prompt);
-		} while (rlinebuf == NULL && errno == EINTR);
-		if (rlinebuf == NULL)
-			nread = 0;
-		else {
-			nread = strlen(rlinebuf) + 1;
-			if (in->buflen < (unsigned int)nread) {
-				while (in->buflen < (unsigned int)nread)
-					in->buflen *= 2;
-				in->bufbegin = erealloc(in->bufbegin, in->buflen);
-			}
-			memcpy(in->bufbegin, rlinebuf, nread - 1);
-			in->bufbegin[nread - 1] = '\n';
-			efree(rlinebuf);
-		}
+static void initbuf(Parser *p) {
+	const char *initial = p->input->str;
+	p->buflen = initial == NULL ? BUFSIZE : strlen(initial);
+	p->bufbegin = p->buf = ealloc(p->buflen);
+	if (initial != NULL) {
+		memcpy(p->buf, initial, p->buflen);
+		p->bufend = p->bufbegin + p->buflen;
 	} else
-#endif
-	do {
-		nread = read(in->fd, (char *) in->bufbegin, in->buflen);
-		SIGCHK();
-	} while (nread == -1 && errno == EINTR);
-
-	if (nread == -1)
-		fail("$&parse", "%s: %s", in->name == NULL ? "es" : in->name, esstrerror(errno));
-	if (nread == 0) {
-		in->eof = TRUE;
-		return EOF;
-	}
-
-	in->buf = in->bufbegin;
-	in->bufend = &in->buf[nread];
-	return *in->buf++;
+		p->bufend = p->bufbegin;
 }
 
-
 /*
- * the input loop
+ * parse -- wrapper around yyparse()
  */
-
-/* parse -- yyparse() wrapper */
-extern Tree *parse(char *pr1, char *pr2) {
-	int result;
+extern Tree *parse(List *reader) {
+	int result, fd, ticket = UNREGISTERED;
 	Parser p;
 	void *oldpspace;
 
@@ -146,24 +122,39 @@ extern Tree *parse(char *pr1, char *pr2) {
 
 	memzero(&p, sizeof (Parser));
 	p.input = input;
+	p.reader = reader;
+	RefAdd(p.reader);
 	p.space = createpspace();
 	oldpspace = setpspace(p.space);
 
 	inityy(&p);
+	initbuf(&p);
 	p.tokenbuf = ealloc(p.bufsize);
 
-	RefAdd(pr2);
-	input->prompt  = pr1 == NULL ? NULL : pstr("%s", pr1);
-	input->prompt2 = pr2 == NULL ? NULL : pstr("%s", pr2);
-	RefRemove(pr2);
-#if !HAVE_READLINE
-	if (input->prompt != NULL)
-		eprint("%s", input->prompt);
-#endif
+	fd = (input->fd == -1)
+		? eopen("/dev/null", oOpen)
+		: dup(input->fd);
+	ticket = defer_mvfd(TRUE, fd, 0);
 
-	result = yyparse(&p);
+	ExceptionHandler
 
+		result = yyparse(&p);
+
+	CatchException (e)
+
+		undefer(ticket);
+		pseal(NULL);
+		setpspace(oldpspace);
+		throw(e);
+
+	EndExceptionHandler
+
+	undefer(ticket);
+
+	RefRemove(p.reader);
 	assert(p.ungot == 0);
+	if (p.bufbegin != NULL)
+		efree(p.bufbegin);
 	if (p.tokenbuf != NULL)
 		efree(p.tokenbuf);
 
@@ -183,6 +174,19 @@ extern Tree *parse(char *pr1, char *pr2) {
 		eprint("%B\n", tree);
 #endif
 	RefReturn(tree);
+}
+
+
+/*
+ * the input loop
+ */
+
+/* cleanup -- clean up after an input source */
+static void cleanup(Input *in) {
+	if (in->fd != -1) {
+		unregisterfd(&in->fd);
+		close(in->fd);
+	}
 }
 
 /* runinput -- run from an input source */
@@ -243,14 +247,6 @@ extern List *runinput(Input *in, int runflags) {
  * pushing new input sources
  */
 
-static void cleanup(Input *in) {
-	if (in->fd != -1) {
-		unregisterfd(&in->fd);
-		close(in->fd);
-	}
-	efree(in->bufbegin);
-}
-
 /* runfd -- run commands from a file descriptor */
 extern List *runfd(int fd, const char *name, int flags) {
 	Input in;
@@ -260,9 +256,6 @@ extern List *runfd(int fd, const char *name, int flags) {
 	in.lineno = 1;
 	in.fd = fd;
 	registerfd(&in.fd, TRUE);
-	in.buflen = BUFSIZE;
-	in.bufbegin = in.buf = ealloc(in.buflen);
-	in.bufend = in.bufbegin;
 	in.name = (name == NULL) ? str("fd %d", fd) : name;
 
 	RefAdd(in.name);
@@ -273,25 +266,22 @@ extern List *runfd(int fd, const char *name, int flags) {
 }
 
 /* runstring -- run commands from a string */
-extern List *runstring(const char *str, const char *name, int flags) {
+extern List *runstring(const char *str, int flags) {
 	Input in;
 	List *result;
-	unsigned char *buf;
 
 	assert(str != NULL);
 
 	memzero(&in, sizeof (Input));
 	in.fd = -1;
 	in.lineno = 1;
-	in.name = (name == NULL) ? str : name;
-	in.buflen = strlen(str);
-	buf = ealloc(in.buflen + 1);
-	memcpy(buf, str, in.buflen);
-	in.bufbegin = in.buf = buf;
-	in.bufend = in.buf + in.buflen;
+	in.name = str;
+	in.str = str;
 
 	RefAdd(in.name);
+	RefAdd(in.str);
 	result = runinput(&in, flags);
+	RefRemove(in.str);
 	RefRemove(in.name);
 	return result;
 }
@@ -305,7 +295,7 @@ extern Tree *parseinput(Input *in) {
 	input = in;
 
 	ExceptionHandler
-		result = parse(NULL, NULL);
+		result = parse(NULL);
 		if (!in->eof)
 			fail("$&parse", "more than one value in term");
 	CatchException (e)
@@ -323,24 +313,19 @@ extern Tree *parseinput(Input *in) {
 extern Tree *parsestring(const char *str) {
 	Input in;
 	Tree *result;
-	unsigned char *buf;
 
 	assert(str != NULL);
-
-	/* TODO: abstract out common code with runstring */
 
 	memzero(&in, sizeof (Input));
 	in.fd = -1;
 	in.lineno = 1;
 	in.name = str;
-	in.buflen = strlen(str);
-	buf = ealloc(in.buflen + 1);
-	memcpy(buf, str, in.buflen);
-	in.bufbegin = in.buf = buf;
-	in.bufend = in.buf + in.buflen;
+	in.str = str;
 
 	RefAdd(in.name);
+	RefAdd(in.str);
 	result = parseinput(&in);
+	RefRemove(in.str);
 	RefRemove(in.name);
 	return result;
 }
