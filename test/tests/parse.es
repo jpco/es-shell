@@ -20,26 +20,29 @@ test 'parser' {
 			'parser handles syntax error'
 	}
 
-	# run these two in subshells, they cause their inputs to go "eof"
-	let (msg = `` \n {catch @ exc {
-			echo $exc
+	let ((e type msg) = ()) {
+		catch @ exc {
+			(e type msg) = $exc
 		} {
 			$&parse {result '('}
 		}
-	}) {
-		assert {~ $msg 'error'*'memory exhausted'* || ~ $msg 'error'*'stack overflow'*} \
-			'parser handles infinite recursion'
+		assert {~ $e error && {~ $msg *'memory exhausted'* || ~ $msg *'stack overflow'*}} 'parser handles infinite recursion'
 	}
 
-	let (msg = `` \n {
+	let ((e type msg) = ()) {
 		catch @ exc {
-			echo 'caught' $exc
+			(e type msg) = $exc
 		} {
 			let (line = 'aaaa ( bbbbb')
-			echo 'parsed' <={$&parse {let (l = $line) {line = (); result $l}}}
+			$&parse {let (l = $line) {line = (); result $l}}
 		}
-	}) {
-		assert {~ $msg 'caught'*'syntax error'*}
+		assert {~ $e error && ~ $msg *'syntax error'*}
+		catch @ exc {
+			(e type msg) = $exc
+		} {
+			$&parse
+		}
+		assert {~ $e eof && ~ $type ()}
 	}
 
 	# test parsing from string while parsing from input
