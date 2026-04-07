@@ -40,7 +40,7 @@ test 'parser' {
 		catch @ exc {
 			(e type msg) = $exc
 		} {
-			$&parse
+			$&parse {result ok}
 		}
 		assert {~ $e eof && ~ $type ()}
 	}
@@ -58,7 +58,7 @@ test 'parser' {
 	# do normal cases last to see if previous ones broke anything
 	assert {~ <={$&parse {result 'echo >[1=2]'}} '{%dup 1 2 {echo}}'}
 
-	# force GCs during parsing
+	# force GC during parsing
 	let (lines = 'fn zoom {' 'this is one' 'let (z = a a a) {' 'this is three' '}' '}')
 	assert {~ <={$&parse {
 		let (l = ()) {

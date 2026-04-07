@@ -65,7 +65,7 @@ static int fill(Parser *p) {
 		in->eof = TRUE;
 		return EOF;
 	}
-	if ((nread = strlen(read)) > p->buflen) {
+	if ((nread = strlen(read)) > p->buflen || p->bufbegin == (unsigned char *)p->input->str) {
 		p->bufbegin = erealloc(p->bufbegin, nread);
 		p->buflen = nread;
 	}
@@ -99,12 +99,13 @@ extern void unget(Parser *p, int c) {
 static void initbuf(Parser *p) {
 	const char *initial = p->input->str;
 	p->buflen = initial == NULL ? BUFSIZE : strlen(initial);
-	p->bufbegin = p->buf = ealloc(p->buflen);
 	if (initial != NULL) {
-		memcpy(p->buf, initial, p->buflen);
+		p->bufbegin = p->buf = (unsigned char *)initial;
 		p->bufend = p->bufbegin + p->buflen;
-	} else
+	} else {
+		p->bufbegin = p->buf = ealloc(p->buflen);
 		p->bufend = p->bufbegin;
+	}
 }
 
 /*
@@ -151,7 +152,7 @@ extern Tree *parse(List *reader) {
 	undefer(ticket);
 	RefRemove(p.reader);
 	assert(p.ungot == 0);
-	if (p.bufbegin != NULL)
+	if (p.bufbegin != NULL && p.bufbegin != (unsigned char *)p.input->str)
 		efree(p.bufbegin);
 	if (p.tokenbuf != NULL)
 		efree(p.tokenbuf);
