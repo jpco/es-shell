@@ -444,41 +444,50 @@ PRIM(read) {
 	Buffer *buffer = openbuffer(0);
 	Ref(List *, result, NULL);
 
+	ExceptionHandler
+
 #if HAVE_LSEEK
-	if (lseek(fd, 0, SEEK_CUR) >= 0) {
-		int n;
-		char *np, *zp;
-		char buf[BUFSIZE];
-		c = EOF;
-		while ((n = readn(fd, buf, BUFSIZE)) > 0) {
-			char *s = buf;
-			c = 0;
-			if ((np = memchr(s, '\n', n)) != NULL) {
-				lseek(fd, 1 + ((np - s) - n), SEEK_CUR);
-				n = np - s;
+		if (lseek(fd, 0, SEEK_CUR) >= 0) {
+			int n;
+			char *np, *zp;
+			char buf[BUFSIZE];
+			c = EOF;
+			while ((n = readn(fd, buf, BUFSIZE)) > 0) {
+				char *s = buf;
+				c = 0;
+				if ((np = memchr(s, '\n', n)) != NULL) {
+					lseek(fd, 1 + ((np - s) - n), SEEK_CUR);
+					n = np - s;
+				}
+				while ((zp = memchr(s, '\0', n)) != NULL) {
+					Term *term;
+					buffer = bufncat(buffer, s, zp - s);
+					n -= zp - s + 1;
+					s = zp + 1;
+					term = mkstr(sealcountedbuffer(buffer));
+					result = mklist(term, result);
+					buffer = openbuffer(0);
+				}
+				buffer = bufncat(buffer, s, n);
+				if (np != NULL)
+					break;
 			}
-			while ((zp = memchr(s, '\0', n)) != NULL) {
-				Term *term;
-				buffer = bufncat(buffer, s, zp - s);
-				n -= zp - s + 1;
-				s = zp + 1;
-				term = mkstr(sealcountedbuffer(buffer));
-				result = mklist(term, result);
-				buffer = openbuffer(0);
-			}
-			buffer = bufncat(buffer, s, n);
-			if (np != NULL)
-				break;
-		}
-	} else
+		} else
 #endif
-		while ((c = read1(fd)) != EOF && c != '\n')
-			if (c == '\0') {
-				Term *term = mkstr(sealcountedbuffer(buffer));
-				result = mklist(term, result);
-				buffer = openbuffer(0);
-			} else
-				buffer = bufputc(buffer, c);
+			while ((c = read1(fd)) != EOF && c != '\n')
+				if (c == '\0') {
+					Term *term = mkstr(sealcountedbuffer(buffer));
+					result = mklist(term, result);
+					buffer = openbuffer(0);
+				} else
+					buffer = bufputc(buffer, c);
+
+	CatchException (e)
+
+		freebuffer(buffer);
+		throw(e);
+
+	EndExceptionHandler
 
 	if (c == EOF && buffer->current == 0) {
 		freebuffer(buffer);
