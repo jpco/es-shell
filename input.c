@@ -53,6 +53,8 @@ static int fill(Parser *p) {
 	if (p->reader != NULL) {
 		result = eval(p->reader, NULL, 0);
 		read = str("%L\n", result, " ");
+	} else if (in->fd == -1) {
+		result = NULL;
 	} else {
 		result = prim("read", NULL, 0);
 		RefAdd(result);
@@ -113,7 +115,7 @@ static void initbuf(Parser *p) {
  */
 extern Tree *parse(List *reader) {
 	volatile int result;
-	int fd, ticket = UNREGISTERED;
+	int ticket = UNREGISTERED;
 	Parser p;
 	void *oldpspace;
 	List *volatile readexception = NULL;
@@ -134,10 +136,12 @@ extern Tree *parse(List *reader) {
 	initbuf(&p);
 	p.tokenbuf = ealloc(p.bufsize);
 
-	fd = (input->fd == -1)
-		? eopen("/dev/null", oOpen)
-		: dup(input->fd);
-	ticket = defer_mvfd(TRUE, fd, 0);
+	if (input->fd >= -1 || reader != NULL) {
+		int fd = (input->fd == -1)
+			  ? eopen("/dev/null", oOpen)
+			  : dup(input->fd);
+		ticket = defer_mvfd(TRUE, fd, 0);
+	}
 
 	ExceptionHandler
 
