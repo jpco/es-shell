@@ -500,6 +500,54 @@ PRIM(read) {
 	RefReturn(result);
 }
 
+PRIM(readpage) {
+	int c;
+	int fd = fdmap(0);
+	Buffer *buffer = openbuffer(0);
+	Ref(List *, result, NULL);
+
+	ExceptionHandler
+
+		int n, nread = BUFSIZE;
+		char *zp;
+		char buf[BUFSIZE];
+		c = EOF;
+		while ((n = readn(fd, buf, nread)) > 0) {
+			char *s = buf;
+			c = 0;
+			while ((zp = memchr(s, '\0', n)) != NULL) {
+				Term *term;
+				buffer = bufncat(buffer, s, zp - s);
+				n -= zp - s + 1;
+				s = zp + 1;
+				term = mkstr(sealcountedbuffer(buffer));
+				result = mklist(term, result);
+				buffer = openbuffer(0);
+			}
+			buffer = bufncat(buffer, s, n);
+			nread -= n;
+			if (nread == 0)
+				break;
+		}
+
+	CatchException (e)
+
+		freebuffer(buffer);
+		throw(e);
+
+	EndExceptionHandler
+
+	if (c == EOF && buffer->current == 0) {
+		freebuffer(buffer);
+	} else {
+		Term *term = mkstr(sealcountedbuffer(buffer));
+		result = mklist(term, result);
+	}
+
+	result = reverse(result);
+	RefReturn(result);
+}
+
 extern Dict *initprims_io(Dict *primdict) {
 	X(openfile);
 	X(close);
@@ -513,5 +561,6 @@ extern Dict *initprims_io(Dict *primdict) {
 	X(writeto);
 #endif
 	X(read);
+	X(readpage);
 	return primdict;
 }
