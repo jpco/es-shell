@@ -137,9 +137,11 @@ extern Tree *parse(List *reader) {
 	p.tokenbuf = ealloc(p.bufsize);
 
 	if (input->fd >= -1 || reader != NULL) {
-		int fd = (input->fd == -1)
-			  ? eopen("/dev/null", oOpen)
-			  : dup(input->fd);
+		int fd;
+		static int dnfd = -1;
+		if (dnfd == -1)
+			dnfd = eopen("/dev/null", oOpen);
+		fd = (input->fd == -1) ? dnfd : input->fd;
 		ticket = defer_mvfd(TRUE, fd, 0);
 	}
 
@@ -153,7 +155,7 @@ extern Tree *parse(List *reader) {
 
 	EndExceptionHandler
 
-	undefer(ticket);
+	undefer(ticket, FALSE);
 	RefRemove(p.reader);
 	assert(p.ungot == 0);
 	if (p.bufbegin != NULL && p.bufbegin != (unsigned char *)p.input->str)
