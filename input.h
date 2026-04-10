@@ -4,13 +4,17 @@
 
 #include "token.h"	/* for YYSTYPE */
 
-/* Input contains state that lasts longer than a $&parse. */
+/* Input contains state that may last longer than a $&parse. */
 struct Input {
 	const char *name, *str;
 	int lineno;
 	int fd;
 	Boolean eof;
 	int runflags;
+
+	/* read buffer */
+	size_t buflen;
+	unsigned char *buf, *bufend, *bufbegin;
 };
 
 typedef enum { NW, RW, KW } WordState;	/* nonword, realword, keyword */
@@ -25,10 +29,6 @@ struct Parser {
 	Tree *tree;		/* the final parse tree */
 	Here *hereq;		/* pending here document queue */
 	const char *error;	/* syntax error, if it exists */
-
-	/* read buffer */
-	size_t buflen;
-	unsigned char *buf, *bufend, *bufbegin;
 
 	/* token pushback buffer */
 	int ungot, unget[MAXUNGET];
