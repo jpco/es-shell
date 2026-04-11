@@ -674,20 +674,29 @@ if {~ <=$&primitives readline} {
 	}
 }
 
+if {~ <=$&primitives historyexpand} {
+	fn-%history-expand = $&historyexpand
+} {
+	fn-%history-expand = result
+}
+
 fn %parse {
 	if %is-interactive {
-		let (in = (); p = $*(1))
+		let (in = (); ex = (); p = $*(1))
 		unwind-protect {
 			$&parse {
 				let (r = <={%read-line $p}) {
 					in = $in $r
 					p = $*(2)
-					result $r
+					ex = $ex <={%history-expand $r}
 				}
 			}
 		} {
-			if {!~ $#fn-%write-history 0 && !~ $#in 0} {
-				%write-history <={%flatten \n $in}
+			if {!~ <={%flatten \n $in} <={%flatten \n $ex}} {
+				echo <={%flatten \n $ex}
+			}
+			if {!~ $#fn-%write-history 0 && !~ $#ex 0} {
+				%write-history <={%flatten \n $ex}
 			}
 		}
 	} {

@@ -475,6 +475,17 @@ PRIM(writehistory) {
 	return NULL;
 }
 
+PRIM(historyexpand) {
+	char *buf;
+	List *result;
+	if (list == NULL)
+		return NULL;
+	history_expand(getstr(list->term), &buf);
+	result = mklist(mkstr(str("%s", buf)), NULL);
+	efree(buf);
+	return result;
+}
+
 PRIM(setmaxhistorylength) {
 	char *s;
 	int n;
@@ -501,6 +512,7 @@ extern Dict *initprims_readline(Dict *primdict) {
 	X(readline);
 	X(sethistory);
 	X(writehistory);
+	X(historyexpand);
 	X(resetterminal);
 	X(setmaxhistorylength);
 	return primdict;
