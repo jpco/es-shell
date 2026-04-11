@@ -199,7 +199,7 @@ static void cleanup(Input *in) {
 }
 
 /* runinput -- run from an input source */
-extern List *runinput(Input *in, int runflags) {
+static List *runinput(Input *in, int runflags) {
 	volatile int flags = runflags;
 	List * volatile result = NULL;
 	List *repl, *dispatch;
@@ -296,7 +296,7 @@ extern List *runstring(const char *str, int flags) {
 }
 
 /* parseinput -- turn an input source into a tree */
-extern Tree *parseinput(Input *in) {
+static Tree *parseinput(Input *in) {
 	Tree * volatile result = NULL;
 	Input *prev = input;
 
