@@ -665,6 +665,8 @@ fn-%is-interactive	= $&isinteractive
 
 if {~ <=$&primitives readline} {
 	fn-%read-line = $&readline
+} {~ <=$&primitives linenoise} {
+	fn-%read-line = $&linenoise
 } {
 	fn %read-line prompt {
 		echo -n $prompt

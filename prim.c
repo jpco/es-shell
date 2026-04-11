@@ -50,6 +50,7 @@ extern void initprims(void) {
 #if HAVE_READLINE
 	prims = initprims_readline(prims);
 #endif
+	prims = initprims_linenoise(prims);
 
 #define	primdict prims
 	X(primitives);

@@ -23,3 +23,4 @@ extern Dict *initprims_access(Dict *primdict);		/* access.c */
 #if HAVE_READLINE
 extern Dict *initprims_readline(Dict *primdict);	/* readline.c */
 #endif
+extern Dict *initprims_linenoise(Dict *primdict);	/* linenoise.c */
