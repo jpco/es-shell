@@ -674,21 +674,24 @@ if {~ <=$&primitives readline} {
 	}
 }
 
-if {~ <=$&primitives historyexpand} {
-	fn-%history-expand = $&historyexpand
-} {
+# This is more annoying to me than it is useful right now.
+# if {~ <=$&primitives historyexpand} {
+# 	fn-%history-expand = $&historyexpand
+# } {
 	fn-%history-expand = result
-}
+# }
 
 fn %parse {
 	if %is-interactive {
 		let (in = (); ex = (); p = $*(1))
 		unwind-protect {
 			$&parse {
-				let (r = <={%read-line $p}) {
+				let (r = <={%read-line $p})
+				let (e = <={%history-expand $r}) {
 					in = $in $r
+					ex = $ex $e
 					p = $*(2)
-					ex = $ex <={%history-expand $r}
+					result $e
 				}
 			}
 		} {

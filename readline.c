@@ -480,7 +480,8 @@ PRIM(historyexpand) {
 	List *result;
 	if (list == NULL)
 		return NULL;
-	history_expand(getstr(list->term), &buf);
+	if (history_expand(getstr(list->term), &buf) == -1)
+		fail("$&historyexpand", "%s", buf); /* this leaks buf */
 	result = mklist(mkstr(str("%s", buf)), NULL);
 	efree(buf);
 	return result;
