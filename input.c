@@ -1,5 +1,6 @@
 /* input.c -- read input from files or strings ($Revision: 1.2 $) */
-/* stdgetenv is based on the FreeBSD getenv */
+
+#define	REQUIRE_STAT	1
 
 #include "es.h"
 #include "input.h"
@@ -12,38 +13,10 @@
 
 
 /*
- * macros
- */
-
-#define	ISEOF(in)	((in)->fill == eoffill)
-
-
-/*
  * globals
  */
 
-Input *input;
-char *prompt, *prompt2;
-
-Boolean disablehistory = FALSE;
-Boolean ignoreeof = FALSE;
-Boolean resetterminal = FALSE;
-static char *history;
-static int historyfd = -1;
-
-#if HAVE_READLINE
-#include <readline/readline.h>
-#include <readline/history.h>
-
-Boolean reloadhistory = FALSE;
-#endif
-
-#if LOCAL_GETENV
-static char *stdgetenv(const char *);
-static char *esgetenv(const char *);
-static char *(*realgetenv)(const char *) = stdgetenv;
-#endif
-
+static Input *input = NULL;
 
 
 /*
@@ -51,331 +24,157 @@ static char *(*realgetenv)(const char *) = stdgetenv;
  */
 
 /* locate -- identify where an error came from */
-static char *locate(Input *in, char *s) {
+static const char *locate(Input *in, const char *s) {
 	return (in->runflags & run_interactive)
-		? s
-		: str("%s:%d: %s", in->name, in->lineno, s);
+		? pstr("%s", s)
+		: pstr("%s:%d: %s", in->name, in->lineno, s);
 }
-
-static char *error = NULL;
 
 /* yyerror -- yacc error entry point */
-extern void yyerror(char *s) {
-#if sgi
-	/* this is so that trip.es works */
-	if (streq(s, "Syntax error"))
-		s = "syntax error";
-#endif
-	if (error == NULL)	/* first error is generally the most informative */
-		error = locate(input, s);
-}
-
-/* warn -- print a warning */
-static void warn(char *s) {
-	eprint("warning: %s\n", locate(input, s));
+extern void yyerror(Parser *p, const char *s) {
+	if (p->error == NULL)	/* first error is generally the most informative */
+		p->error = locate(p->input, s);
 }
 
 
 /*
- * history
+ * getting and ungetting characters
  */
 
-/* loghistory -- write the last command out to a file */
-static void loghistory(const char *cmd, size_t len) {
-	const char *s, *end;
-	if (history == NULL || disablehistory)
-		return;
-	if (historyfd == -1) {
-		historyfd = eopen(history, oAppend);
-		if (historyfd == -1) {
-			eprint("history(%s): %s\n", history, esstrerror(errno));
-			vardef("history", NULL, NULL);
-			return;
-		}
+/* fill -- fill input buffer by running a command */
+static int fill(Parser *p) {
+	List *result;
+	char *read;
+	size_t nread;
+	Input *in = p->input;
+
+	assert(p->buf == p->bufend);
+
+	if (p->reader != NULL) {
+		result = eval(p->reader, NULL, 0);
+		read = str("%L\n", result, " ");
+	} else {
+		result = prim("read", NULL, 0);
+		RefAdd(result);
+		if (length(result) > 1)
+			eprint("%s\n", locate(in, "null character ignored"));
+		read = str("%L\n", result, "");
+		RefRemove(result);
 	}
-	/* skip empty lines and comments in history */
-	for (s = cmd, end = s + len; s < end; s++)
-		switch (*s) {
-		case '#': case '\n':	return;
-		case ' ': case '\t':	break;
-		default:		goto writeit;
-		}
-	writeit:
-		;
-	/*
-	 * Small unix hack: since read() reads only up to a newline
-	 * from a terminal, then presumably this write() will write at
-	 * most only one input line at a time.
-	 */
-	ewrite(historyfd, cmd, len);
-}
-
-#if HAVE_READLINE
-/* Manage maximum in-memory history length.  This has speed & memory
- * implications to which different users have different tolerances, so let them
- * pick. */
-extern void setmaxhistorylength(int len) {
-	static int currenthistlen = -1; /* unlimited */
-	if (len != currenthistlen) {
-		switch (len) {
-		case -1:
-			unstifle_history();
-			break;
-		case 0:
-			clear_history();
-			FALLTHROUGH;
-		default:
-			stifle_history(len);
-		}
-		currenthistlen = len;
+	if (result == NULL) {	/* eof */
+		in->eof = TRUE;
+		return EOF;
 	}
-}
-
-static void reload_history(void) {
-	/* Attempt to populate readline history with new history file. */
-	if (history != NULL)
-		read_history(history);
-	using_history();
-
-	reloadhistory = FALSE;
-}
-#endif
-
-/* sethistory -- change the file for the history log */
-extern void sethistory(char *file) {
-#if HAVE_READLINE
-	/* make sure the old file has a chance to get loaded */
-	if (reloadhistory)
-		reload_history();
-#endif
-	if (historyfd != -1) {
-		close(historyfd);
-		historyfd = -1;
+	if ((nread = strlen(read)) > p->buflen) {
+		p->bufbegin = erealloc(p->bufbegin, nread);
+		p->buflen = nread;
 	}
-#if HAVE_READLINE
-	reloadhistory = TRUE;
-#endif
-	history = file;
+	memcpy(p->bufbegin, read, nread);
+
+	p->buf = p->bufbegin;
+	p->bufend = &p->buf[nread];
+
+	return *p->buf++;
 }
 
-
-/*
- * unget -- character pushback
- */
-
-/* ungetfill -- input->fill routine for ungotten characters */
-static int ungetfill(Input *in) {
+/* get -- get a character, filter out nulls */
+extern int get(Parser *p) {
 	int c;
-	assert(in->ungot > 0);
-	c = in->unget[--in->ungot];
-	if (in->ungot == 0) {
-		assert(in->rfill != NULL);
-		in->fill = in->rfill;
-		in->rfill = NULL;
-		assert(in->rbuf != NULL);
-		in->buf = in->rbuf;
-		in->rbuf = NULL;
+	if (p->ungot > 0)
+		return p->unget[--p->ungot];
+	c = p->buf < p->bufend ? *p->buf++ : fill(p);
+	if (c != EOF && p->input->runflags & run_echoinput) {
+		char buf = (char)c;
+		ewrite(2, &buf, 1);
 	}
 	return c;
 }
 
 /* unget -- push back one character */
-extern void unget(Input *in, int c) {
-	if (in->ungot > 0) {
-		assert(in->ungot < MAXUNGET);
-		in->unget[in->ungot++] = c;
-	} else if (in->bufbegin < in->buf && in->buf[-1] == c && (input->runflags & run_echoinput) == 0)
-		--in->buf;
-	else {
-		assert(in->rfill == NULL);
-		in->rfill = in->fill;
-		in->fill = ungetfill;
-		assert(in->rbuf == NULL);
-		in->rbuf = in->buf;
-		in->buf = in->bufend;
-		assert(in->ungot == 0);
-		in->ungot = 1;
-		in->unget[0] = c;
-	}
+extern void unget(Parser *p, int c) {
+	assert(p->ungot < MAXUNGET);
+	p->unget[p->ungot++] = c;
 }
 
+static void initbuf(Parser *p) {
+	const char *initial = p->input->str;
+	p->buflen = initial == NULL ? BUFSIZE : strlen(initial);
+	p->bufbegin = p->buf = ealloc(p->buflen);
+	if (initial != NULL) {
+		memcpy(p->buf, initial, p->buflen);
+		p->bufend = p->bufbegin + p->buflen;
+	} else
+		p->bufend = p->bufbegin;
+}
 
 /*
- * getting characters
+ * parse -- wrapper around yyparse()
  */
+extern Tree *parse(List *reader) {
+	volatile int result;
+	int fd, ticket = UNREGISTERED;
+	Parser p;
+	void *oldpspace;
+	List *volatile readexception = NULL;
 
-/* get -- get a character, filter out nulls */
-static int get(Input *in) {
-	int c;
-	while ((c = (in->buf < in->bufend ? *in->buf++ : (*in->fill)(in))) == '\0')
-		warn("null character ignored");
-	return c;
-}
-
-/* getverbose -- get a character, print it to standard error */
-static int getverbose(Input *in) {
-	if (in->fill == ungetfill)
-		return get(in);
-	else {
-		int c = get(in);
-		if (c != EOF) {
-			char buf = c;
-			ewrite(2, &buf, 1);
-		}
-		return c;
+	if (input->eof) {
+		input->eof = FALSE;
+		throw(mklist(mkstr("eof"), NULL));
 	}
-}
 
-/* eoffill -- report eof when called to fill input buffer */
-static int eoffill(Input UNUSED *in) {
-	assert(in->fd == -1);
-	return EOF;
-}
+	memzero(&p, sizeof (Parser));
+	p.input = input;
+	p.reader = reader;
+	RefAdd(p.reader);
+	p.space = createpspace();
+	oldpspace = setpspace(p.space);
 
-#if HAVE_READLINE
-/* callreadline -- readline wrapper */
-static char *callreadline(char *prompt0) {
-	char *volatile prompt = prompt0;
-	char *r;
-	if (prompt == NULL)
-		prompt = ""; /* bug fix for readline 2.0 */
-	if (reloadhistory)
-		reload_history();
-	if (resetterminal) {
-		rl_reset_terminal(NULL);
-		resetterminal = FALSE;
+	inityy(&p);
+	initbuf(&p);
+	p.tokenbuf = ealloc(p.bufsize);
+
+	fd = (input->fd == -1)
+		? eopen("/dev/null", oOpen)
+		: dup(input->fd);
+	ticket = defer_mvfd(TRUE, fd, 0);
+
+	ExceptionHandler
+
+		result = yyparse(&p);
+
+	CatchException (e)
+
+		readexception = e;
+
+	EndExceptionHandler
+
+	undefer(ticket);
+	RefRemove(p.reader);
+	assert(p.ungot == 0);
+	if (p.bufbegin != NULL)
+		efree(p.bufbegin);
+	if (p.tokenbuf != NULL)
+		efree(p.tokenbuf);
+
+	if (result || p.error != NULL || readexception != NULL) {
+		assert(p.error != NULL || readexception != NULL);
+		Ref(const char *, e, p.error != NULL ? str("%s", p.error) : NULL);
+		pseal(NULL);
+		setpspace(oldpspace);
+		if (e != NULL)
+			fail("$&parse", "%s", e);
+		else
+			throw(readexception);
+		RefEnd(e);
 	}
-	if (RL_ISSTATE(RL_STATE_INITIALIZED))
-		rl_reset_screen_size();
-	interrupted = FALSE;
-	if (!setjmp(slowlabel)) {
-		slow = TRUE;
-		r = interrupted ? NULL : readline(prompt);
-		if (interrupted)
-			errno = EINTR;
-	} else {
-		r = NULL;
-		errno = EINTR;
-	}
-	slow = FALSE;
-	SIGCHK();
-	return r;
-}
+
+	Ref(Tree *, tree, pseal(p.tree));
+	setpspace(oldpspace);
+#if LISPTREES
+	if (input->runflags & run_lisptrees)
+		eprint("%B\n", tree);
 #endif
-
-#if LOCAL_GETENV
-/* esgetenv -- fake version of getenv for readline (or other libraries) */
-static char *esgetenv(const char *name) {
-	List *value = varlookup(name, NULL);
-	if (value == NULL)
-		return NULL;
-	else {
-		char *export;
-		static Dict *envdict;
-		static Boolean initialized = FALSE;
-		Ref(char *, string, NULL);
-
-		gcdisable();
-		if (!initialized) {
-			initialized = TRUE;
-			envdict = mkdict();
-			globalroot(&envdict);
-		}
-
-		string = dictget(envdict, name);
-		if (string != NULL)
-			efree(string);
-
-		export = str("%W", value);
-		string = ealloc(strlen(export) + 1);
-		strcpy(string, export);
-		envdict = dictput(envdict, (char *) name, string);
-
-		gcenable();
-		RefReturn(string);
-	}
-}
-
-static char *stdgetenv(const char *name) {
-	extern char **environ;
-	register int len;
-	register const char *np;
-	register char **p, *c;
-
-	if (name == NULL || environ == NULL)
-		return (NULL);
-	for (np = name; *np && *np != '='; ++np)
-		continue;
-	len = np - name;
-	for (p = environ; (c = *p) != NULL; ++p)
-		if (strncmp(c, name, len) == 0 && c[len] == '=') {
-			return (c + len + 1);
-		}
-	return (NULL);
-}
-
-char *getenv(const char *name) {
-	return realgetenv(name);
-}
-
-extern void initgetenv(void) {
-	realgetenv = esgetenv;
-}
-#endif
-
-/* fdfill -- fill input buffer by reading from a file descriptor */
-static int fdfill(Input *in) {
-	long nread;
-	assert(in->buf == in->bufend);
-	assert(in->fd >= 0);
-
-#if HAVE_READLINE
-	if (in->runflags & run_interactive && in->fd == 0) {
-		char *rlinebuf = NULL;
-		do {
-			rlinebuf = callreadline(prompt);
-		} while (rlinebuf == NULL && errno == EINTR);
-
-		if (rlinebuf == NULL)
-			nread = 0;
-		else {
-			if (*rlinebuf != '\0')
-				add_history(rlinebuf);
-			nread = strlen(rlinebuf) + 1;
-			if (in->buflen < (unsigned int)nread) {
-				while (in->buflen < (unsigned int)nread)
-					in->buflen *= 2;
-				in->bufbegin = erealloc(in->bufbegin, in->buflen);
-			}
-			memcpy(in->bufbegin, rlinebuf, nread - 1);
-			in->bufbegin[nread - 1] = '\n';
-			efree(rlinebuf);
-		}
-	} else
-#endif
-	do {
-		nread = eread(in->fd, (char *) in->bufbegin, in->buflen);
-		SIGCHK();
-	} while (nread == -1 && errno == EINTR);
-
-	if (nread <= 0) {
-		if (!ignoreeof) {
-			close(in->fd);
-			in->fd = -1;
-			in->fill = eoffill;
-			in->runflags &= ~run_interactive;
-		}
-		if (nread == -1)
-			fail("$&parse", "%s: %s", in->name == NULL ? "es" : in->name, esstrerror(errno));
-		return EOF;
-	}
-
-	if (in->runflags & run_interactive)
-		loghistory((char *) in->bufbegin, nread);
-
-	in->buf = in->bufbegin;
-	in->bufend = &in->buf[nread];
-	return *in->buf++;
+	RefReturn(tree);
 }
 
 
@@ -383,47 +182,12 @@ static int fdfill(Input *in) {
  * the input loop
  */
 
-/* parse -- call yyparse(), but disable garbage collection and catch errors */
-extern Tree *parse(char *pr1, char *pr2) {
-	int result;
-	assert(error == NULL);
-
-	inityy();
-	emptyherequeue();
-
-	if (ISEOF(input))
-		throw(mklist(mkstr("eof"), NULL));
-
-#if HAVE_READLINE
-	prompt = (pr1 == NULL) ? "" : pr1;
-#else
-	if (pr1 != NULL)
-		eprint("%s", pr1);
-#endif
-	prompt2 = pr2;
-
-	gcreserve(300 * sizeof (Tree));
-	gcdisable();
-	result = yyparse();
-	gcenable();
-
-	if (result || error != NULL) {
-		char *e;
-		assert(error != NULL);
-		e = error;
-		error = NULL;
-		fail("$&parse", "%s", e);
+/* cleanup -- clean up after an input source */
+static void cleanup(Input *in) {
+	if (in->fd != -1) {
+		unregisterfd(&in->fd);
+		close(in->fd);
 	}
-#if LISPTREES
-	if (input->runflags & run_lisptrees)
-		eprint("%B\n", parsetree);
-#endif
-	return parsetree;
-}
-
-/* resetparser -- clear parser errors in the signal handler */
-extern void resetparser(void) {
-	error = NULL;
 }
 
 /* runinput -- run from an input source */
@@ -432,6 +196,7 @@ extern List *runinput(Input *in, int runflags) {
 	List * volatile result = NULL;
 	List *repl, *dispatch;
 	Push push;
+	Input *prev = input;
 	const char *dispatcher[] = {
 		"fn-%eval-noprint",
 		"fn-%eval-print",
@@ -441,8 +206,6 @@ extern List *runinput(Input *in, int runflags) {
 
 	flags &= ~eval_inchild;
 	in->runflags = flags;
-	in->get = (flags & run_echoinput) ? getverbose : get;
-	in->prev = input;
 	input = in;
 
 	ExceptionHandler
@@ -462,21 +225,21 @@ extern List *runinput(Input *in, int runflags) {
 				   : "fn-%batch-loop",
 				 NULL);
 		result = (repl == NULL)
-				? prim("batchloop", NULL, NULL, flags)
+				? prim("batchloop", NULL, flags)
 				: eval(repl, NULL, flags);
 
 		varpop(&push);
 
 	CatchException (e)
 
-		(*input->cleanup)(input);
-		input = input->prev;
+		cleanup(input);
+		input = prev;
 		throw(e);
 
 	EndExceptionHandler
 
-	input = in->prev;
-	(*in->cleanup)(in);
+	cleanup(input);
+	input = prev;
 	return result;
 }
 
@@ -485,14 +248,6 @@ extern List *runinput(Input *in, int runflags) {
  * pushing new input sources
  */
 
-/* fdcleanup -- cleanup after running from a file descriptor */
-static void fdcleanup(Input *in) {
-	unregisterfd(&in->fd);
-	if (in->fd != -1)
-		close(in->fd);
-	efree(in->bufbegin);
-}
-
 /* runfd -- run commands from a file descriptor */
 extern List *runfd(int fd, const char *name, int flags) {
 	Input in;
@@ -500,13 +255,8 @@ extern List *runfd(int fd, const char *name, int flags) {
 
 	memzero(&in, sizeof (Input));
 	in.lineno = 1;
-	in.fill = fdfill;
-	in.cleanup = fdcleanup;
 	in.fd = fd;
 	registerfd(&in.fd, TRUE);
-	in.buflen = BUFSIZE;
-	in.bufbegin = in.buf = ealloc(in.buflen);
-	in.bufend = in.bufbegin;
 	in.name = (name == NULL) ? str("fd %d", fd) : name;
 
 	RefAdd(in.name);
@@ -516,39 +266,23 @@ extern List *runfd(int fd, const char *name, int flags) {
 	return result;
 }
 
-/* stringcleanup -- cleanup after running from a string */
-static void stringcleanup(Input *in) {
-	efree(in->bufbegin);
-}
-
-/* stringfill -- placeholder than turns into EOF right away */
-static int stringfill(Input *in) {
-	in->fill = eoffill;
-	return EOF;
-}
-
 /* runstring -- run commands from a string */
-extern List *runstring(const char *str, const char *name, int flags) {
+extern List *runstring(const char *str, int flags) {
 	Input in;
 	List *result;
-	unsigned char *buf;
 
 	assert(str != NULL);
 
 	memzero(&in, sizeof (Input));
 	in.fd = -1;
 	in.lineno = 1;
-	in.name = (name == NULL) ? str : name;
-	in.fill = stringfill;
-	in.buflen = strlen(str);
-	buf = ealloc(in.buflen + 1);
-	memcpy(buf, str, in.buflen);
-	in.bufbegin = in.buf = buf;
-	in.bufend = in.buf + in.buflen;
-	in.cleanup = stringcleanup;
+	in.name = str;
+	in.str = str;
 
 	RefAdd(in.name);
+	RefAdd(in.str);
 	result = runinput(&in, flags);
+	RefRemove(in.str);
 	RefRemove(in.name);
 	return result;
 }
@@ -556,24 +290,23 @@ extern List *runstring(const char *str, const char *name, int flags) {
 /* parseinput -- turn an input source into a tree */
 extern Tree *parseinput(Input *in) {
 	Tree * volatile result = NULL;
+	Input *prev = input;
 
-	in->prev = input;
 	in->runflags = 0;
-	in->get = get;
 	input = in;
 
 	ExceptionHandler
-		result = parse(NULL, NULL);
-		if (get(in) != EOF)
+		result = parse(NULL);
+		if (!in->eof)
 			fail("$&parse", "more than one value in term");
 	CatchException (e)
-		(*input->cleanup)(input);
-		input = input->prev;
+		cleanup(input);
+		input = prev;
 		throw(e);
 	EndExceptionHandler
 
-	input = in->prev;
-	(*in->cleanup)(in);
+	cleanup(input);
+	input = prev;
 	return result;
 }
 
@@ -581,26 +314,19 @@ extern Tree *parseinput(Input *in) {
 extern Tree *parsestring(const char *str) {
 	Input in;
 	Tree *result;
-	unsigned char *buf;
 
 	assert(str != NULL);
-
-	/* TODO: abstract out common code with runstring */
 
 	memzero(&in, sizeof (Input));
 	in.fd = -1;
 	in.lineno = 1;
 	in.name = str;
-	in.fill = stringfill;
-	in.buflen = strlen(str);
-	buf = ealloc(in.buflen + 1);
-	memcpy(buf, str, in.buflen);
-	in.bufbegin = in.buf = buf;
-	in.bufend = in.buf + in.buflen;
-	in.cleanup = stringcleanup;
+	in.str = str;
 
 	RefAdd(in.name);
+	RefAdd(in.str);
 	result = parseinput(&in);
+	RefRemove(in.str);
 	RefRemove(in.name);
 	return result;
 }
@@ -610,140 +336,7 @@ extern Boolean isinteractive(void) {
 	return input == NULL ? FALSE : ((input->runflags & run_interactive) != 0);
 }
 
-
-/*
- * readline integration.
- */
-#if HAVE_READLINE
-/* quote -- teach readline how to quote a word in es during completion */
-static char *quote(char *text, int type, char *qp) {
-	char *p, *r;
-
-	/* worst-case size: string is 100% quote characters which will all be
-	 * doubled, plus initial and final quotes and \0 */
-	p = r = ealloc(strlen(text) * 2 + 3);
-	/* supply opening quote if not already present */
-	if (*qp != '\'')
-		*p++ = '\'';
-	while (*text) {
-		/* double any quotes for es quote-escaping rules */
-		if (*text == '\'')
-			*p++ = '\'';
-		*p++ = *text++;
-	}
-	if (type == SINGLE_MATCH)
-		*p++ = '\'';
-	*p = '\0';
-	return r;
-}
-
-/* unquote -- teach es how to unquote a word */
-static char *unquote(char *text, int quote_char) {
-	char *p, *r;
-
-	p = r = ealloc(strlen(text) + 1);
-	while (*text) {
-		*p++ = *text++;
-		if (quote_char && *(text - 1) == '\'' && *text == '\'')
-			++text;
-	}
-	*p = '\0';
-	return r;
-}
-
-static char *complprefix;
-static List *(*wordslistgen)(char *);
-
-static char *list_completion_function(const char *text, int state) {
-	static char **matches = NULL;
-	static int matches_idx, matches_len;
-	int i, rlen;
-	char *result;
-
-	const int pfx_len = strlen(complprefix);
-
-	if (!state) {
-		const char *name = &text[pfx_len];
-
-		Vector *vm = vectorize(wordslistgen((char *)name));
-		matches = vm->vector;
-		matches_len = vm->count;
-		matches_idx = 0;
-	}
-
-	if (!matches || matches_idx >= matches_len)
-		return NULL;
-
-	rlen = strlen(matches[matches_idx]);
-	result = ealloc(rlen + pfx_len + 1);
-	for (i = 0; i < pfx_len; i++)
-		result[i] = complprefix[i];
-	strcpy(&result[pfx_len], matches[matches_idx]);
-	result[rlen + pfx_len] = '\0';
-
-	matches_idx++;
-	return result;
-}
-
-char **builtin_completion(const char *text, int UNUSED start, int UNUSED end) {
-	char **matches = NULL;
-
-	if (*text == '$') {
-		wordslistgen = varswithprefix;
-		complprefix = "$";
-		switch (text[1]) {
-		case '&':
-			wordslistgen = primswithprefix;
-			complprefix = "$&";
-			break;
-		case '^': complprefix = "$^"; break;
-		case '#': complprefix = "$#"; break;
-		}
-		matches = rl_completion_matches(text, list_completion_function);
-	}
-
-	/* ~foo => username.  ~foo/bar already gets completed as filename. */
-	if (!matches && *text == '~' && !strchr(text, '/'))
-		matches = rl_completion_matches(text, rl_username_completion_function);
-
-	return matches;
-}
-#endif /* HAVE_READLINE */
-
-
-/*
- * initialization
- */
-
-/* initinput -- called at dawn of time from main() */
-extern void initinput(void) {
-	input = NULL;
-
-	/* declare the global roots */
-	globalroot(&history);		/* history file */
-	globalroot(&error);		/* parse errors */
-	globalroot(&prompt);		/* main prompt */
-	globalroot(&prompt2);		/* secondary prompt */
-
-	/* mark the historyfd as a file descriptor to hold back from forked children */
-	registerfd(&historyfd, TRUE);
-
-	/* call the parser's initialization */
-	initparse();
-
-#if HAVE_READLINE
-	rl_readline_name = "es";
-
-	/* these two word_break_characters exclude '&' due to primitive completion */
-	rl_completer_word_break_characters = " \t\n\\'`$><=;|{()}";
-	rl_basic_word_break_characters = " \t\n\\'`$><=;|{()}";
-	rl_completer_quote_characters = "'";
-	rl_special_prefixes = "$";
-
-	rl_attempted_completion_function = builtin_completion;
-
-	rl_filename_quote_characters = " \t\n\\`'$><=;|&{()}";
-	rl_filename_quoting_function = quote;
-	rl_filename_dequoting_function = unquote;
-#endif
+/* isfromfd -- is the innermost input source reading from a file descriptor? */
+extern Boolean isfromfd(void) {
+	return input == NULL ? FALSE : (input->fd >= 0);
 }

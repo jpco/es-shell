@@ -4,6 +4,7 @@
 
 #include "es.h"
 #include "prim.h"
+#include "version.h"
 
 PRIM(result) {
 	return list;
@@ -33,7 +34,7 @@ PRIM(setnoexport) {
 }
 
 PRIM(version) {
-	return mklist(mkstr((char *) version), NULL);
+	return (List *)version;
 }
 
 PRIM(exec) {
@@ -97,7 +98,7 @@ PRIM(whatis) {
 		List *fn;
 		Ref(char *, prog, getstr(term));
 		assert(prog != NULL);
-		fn = varlookup2("fn-", prog, binding);
+		fn = varlookup2("fn-", prog, NULL);
 		if (fn != NULL)
 			list = fn;
 		else {
@@ -141,41 +142,23 @@ PRIM(var) {
 	Ref(List *, rest, list->next);
 	Ref(char *, name, getstr(list->term));
 	Ref(List *, defn, varlookup(name, NULL));
-	rest = prim_var(rest, NULL, evalflags);
+	rest = prim_var(rest, evalflags);
 	term = mkstr(str("%S = %#L", name, defn, " "));
 	list = mklist(term, rest);
 	RefEnd3(defn, name, rest);
 	return list;
 }
 
-PRIM(sethistory) {
-	if (list == NULL) {
-		sethistory(NULL);
-		return NULL;
-	}
-	Ref(List *, lp, list);
-	sethistory(getstr(lp->term));
-	RefReturn(lp);
-}
-
 PRIM(parse) {
 	List *result;
-	Tree *tree;
-	Ref(char *, prompt1, NULL);
-	Ref(char *, prompt2, NULL);
-	Ref(List *, lp, list);
-	if (lp != NULL) {
-		prompt1 = getstr(lp->term);
-		if ((lp = lp->next) != NULL)
-			prompt2 = getstr(lp->term);
-	}
-	RefEnd(lp);
-	tree = parse(prompt1, prompt2);
+	Ref(List *, reader, list);
+	Ref(Tree *, tree, NULL);
+	tree = parse(reader);
 	result = (tree == NULL)
 		   ? NULL
-		   : mklist(mkterm(NULL, mkclosure(mk(nThunk, tree), NULL)),
+		   : mklist(mkterm(NULL, mkclosure(gcmk(nThunk, tree), NULL)),
 			    NULL);
-	RefEnd2(prompt2, prompt1);
+	RefEnd2(tree, reader);
 	return result;
 }
 
@@ -195,7 +178,7 @@ PRIM(batchloop) {
 			List *parser, *cmd;
 			parser = varlookup("fn-%parse", NULL);
 			cmd = (parser == NULL)
-					? prim("parse", NULL, NULL, 0)
+					? prim("parse", NULL, 0)
 					: eval(parser, NULL, 0);
 			SIGCHK();
 			dispatch = varlookup("fn-%dispatch", NULL);
@@ -282,30 +265,6 @@ PRIM(setmaxevaldepth) {
 	RefReturn(lp);
 }
 
-#if HAVE_READLINE
-PRIM(setmaxhistorylength) {
-	char *s;
-	int n;
-	if (list == NULL) {
-		setmaxhistorylength(-1); /* unlimited */
-		return NULL;
-	}
-	if (list->next != NULL)
-		fail("$&setmaxhistorylength", "usage: $&setmaxhistorylength [limit]");
-	Ref(List *, lp, list);
-	n = (int)strtol(getstr(lp->term), &s, 0);
-	if (n < 0 || (s != NULL && *s != '\0'))
-		fail("$&setmaxhistorylength", "max-history-length must be set to a positive integer");
-	setmaxhistorylength(n);
-	RefReturn(lp);
-}
-
-PRIM(resetterminal) {
-	resetterminal = TRUE;
-	return ltrue;
-}
-#endif
-
 
 /*
  * initialization
@@ -319,7 +278,6 @@ extern Dict *initprims_etc(Dict *primdict) {
 	X(dot);
 	X(flatten);
 	X(whatis);
-	X(sethistory);
 	X(split);
 	X(fsplit);
 	X(var);
@@ -335,9 +293,5 @@ extern Dict *initprims_etc(Dict *primdict) {
 	X(exitonfalse);
 	X(noreturn);
 	X(setmaxevaldepth);
-#if HAVE_READLINE
-	X(resetterminal);
-	X(setmaxhistorylength);
-#endif
 	return primdict;
 }

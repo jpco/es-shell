@@ -174,13 +174,14 @@ PRIM(here) {
 		;
 	*tailp = NULL;
 
+	Ref(List *, cmd, tail);
 	Ref(char *, doc, (lp == tail) ? NULL : str("%L", lp, ""));
 	doclen = strlen(doc);
 
-	Ref(List *, cmd, tail);
 #ifdef PIPE_BUF
 	if (doclen <= PIPE_BUF) {
-		pipe(p);
+		if (pipe(p) == -1)
+			fail("$&here", "pipe: %s", esstrerror(errno));
 		ewrite(p[1], doc, doclen);
 	} else
 #endif
@@ -209,7 +210,7 @@ PRIM(here) {
 		status = ewaitfor(pid);
 		printstatus(0, status);
 	}
-	RefEnd2(cmd, doc);
+	RefEnd2(doc, cmd);
 	RefReturn(lp);
 }
 
@@ -363,9 +364,9 @@ static List *bqinput(const char *sep, int fd) {
 	startsplit(sep, TRUE);
 
 restart:
-	while ((n = eread(fd, in, sizeof in)) > 0)
+	/* avoid SIGCHK()ing in here so we don't abandon our child process */
+	while ((n = read(fd, in, sizeof in)) > 0)
 		splitstring(in, n, FALSE);
-	SIGCHK();
 	if (n == -1) {
 		if (errno == EINTR)
 			goto restart;
@@ -377,7 +378,7 @@ restart:
 
 PRIM(backquote) {
 	int pid, p[2], status;
-	
+
 	caller = "$&backquote";
 	if (list == NULL)
 		fail(caller, "usage: backquote separator command [args ...]");
@@ -412,43 +413,82 @@ PRIM(newfd) {
 	return mklist(mkstr(str("%d", newfd())), NULL);
 }
 
-/* read1 -- read one byte */
+/* read1 -- read one byte, return the byte */
 static int read1(int fd) {
 	int nread;
 	unsigned char buf;
 	do {
-		nread = eread(fd, (char *) &buf, 1);
+		nread = read(fd, (char *) &buf, 1);
 		SIGCHK();
 	} while (nread == -1 && errno == EINTR);
 	if (nread == -1)
-		fail("$&read", esstrerror(errno));
+		fail("$&read", "%s", esstrerror(errno));
 	return nread == 0 ? EOF : buf;
+}
+
+/* readn -- read up to n bytes, return the number read */
+static int readn(int fd, char *s, size_t n) {
+	int nread;
+	do {
+		nread = read(fd, s, n);
+		SIGCHK();
+	} while (nread == -1 && errno == EINTR);
+	if (nread == -1)
+		fail("$&read", "%s", esstrerror(errno));
+	return nread;
 }
 
 PRIM(read) {
 	int c;
 	int fd = fdmap(0);
+	Buffer *buffer = openbuffer(0);
+	Ref(List *, result, NULL);
 
-	static Buffer *buffer = NULL;
-	if (buffer != NULL)
-		freebuffer(buffer);
-	buffer = openbuffer(0);
-
-	while ((c = read1(fd)) != EOF && c != '\n')
-		if (c == '\0')
-			fail("$&read", "%%read: null character encountered");
-		else
-			buffer = bufputc(buffer, c);
+#if HAVE_LSEEK
+	if (lseek(fd, 0, SEEK_CUR) >= 0) {
+		int n;
+		char *np, *zp;
+		char buf[BUFSIZE];
+		c = EOF;
+		while ((n = readn(fd, buf, BUFSIZE)) > 0) {
+			char *s = buf;
+			c = 0;
+			if ((np = memchr(s, '\n', n)) != NULL) {
+				lseek(fd, 1 + ((np - s) - n), SEEK_CUR);
+				n = np - s;
+			}
+			while ((zp = memchr(s, '\0', n)) != NULL) {
+				Term *term;
+				buffer = bufncat(buffer, s, zp - s);
+				n -= zp - s + 1;
+				s = zp + 1;
+				term = mkstr(sealcountedbuffer(buffer));
+				result = mklist(term, result);
+				buffer = openbuffer(0);
+			}
+			buffer = bufncat(buffer, s, n);
+			if (np != NULL)
+				break;
+		}
+	} else
+#endif
+		while ((c = read1(fd)) != EOF && c != '\n')
+			if (c == '\0') {
+				Term *term = mkstr(sealcountedbuffer(buffer));
+				result = mklist(term, result);
+				buffer = openbuffer(0);
+			} else
+				buffer = bufputc(buffer, c);
 
 	if (c == EOF && buffer->current == 0) {
 		freebuffer(buffer);
-		buffer = NULL;
-		return NULL;
 	} else {
-		List *result = mklist(mkstr(sealcountedbuffer(buffer)), NULL);
-		buffer = NULL;
-		return result;
+		Term *term = mkstr(sealcountedbuffer(buffer));
+		result = mklist(term, result);
 	}
+
+	result = reverse(result);
+	RefReturn(result);
 }
 
 extern Dict *initprims_io(Dict *primdict) {
