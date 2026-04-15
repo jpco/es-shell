@@ -475,6 +475,8 @@ PRIM(writehistory) {
 	return NULL;
 }
 
+/* limitations here include: can't tell when it only removed escape characters,
+ * doesn't understand es quote/escape rules */
 PRIM(historyexpand) {
 	char *buf;
 	List *result;
@@ -509,6 +511,55 @@ PRIM(resetterminal) {
 	return ltrue;
 }
 
+/* hooking a key binding to an es command is funky.  TWO bindings are created:
+ *  1. rl_bind_keyseq(kseq, rl_dispatch) => call es_rl_dispatch for any
+ *     es-command-bound key
+ *  2. rl_generic_bind(ISMACR, kseq, cmd, eskeymap) => create a mapping for
+ *     es_rl_dispatch to "manually" look up which cmd to call
+ *
+ * eskeymap is not GC'd, so we store an mprinted string version of our command
+ * there.
+ */
+Keymap eskeymap = NULL;
+
+static int es_rl_dispatch(int UNUSED count, int UNUSED key) {
+	int type;
+	char *cmd = (char *)rl_function_of_keyseq(rl_executing_keyseq, eskeymap, &type);
+
+	if (cmd == NULL || type != ISMACR)
+		fail("$&readline", "cannot find command for key sequence");
+
+	/* TODO: decide what the actual call environment is for cmd.
+	 * arguments? environment? stdout? return value? */
+	eval(mklist(mkstr(str("{%s}", cmd)), NULL), NULL, 0);	/* TODO: evalflags? */
+	return 0;
+}
+
+PRIM(setrlhook) {
+	char *kseq;
+	if (list == NULL)
+		fail("$&rlhook", "usage: $&setrlhook keyseq [cmd]");
+	if (eskeymap == NULL)
+		eskeymap = rl_make_bare_keymap();
+	Ref(List *, lp, list->next);
+	kseq = getstr(list->term);	/* bogus keymap?? */
+	if (list->next != NULL) {
+		/* set it */
+		char *cmd = mprint("%L", lp, " ");
+		rl_bind_keyseq(kseq, es_rl_dispatch);
+		rl_generic_bind(ISMACR, kseq, cmd, eskeymap);
+	} else {
+		/* forget it
+		 * FIXME: memory leaks
+		 * FIXME: I don't know if this "unsets" in the way I expect
+		 *        do I want NULL or do I want whatever the default is?
+		 */
+		rl_bind_keyseq(kseq, NULL);
+		rl_bind_keyseq_in_map(kseq, NULL, eskeymap);
+	}
+	RefReturn(lp);
+}
+
 extern Dict *initprims_readline(Dict *primdict) {
 	X(readline);
 	X(sethistory);
@@ -516,6 +567,7 @@ extern Dict *initprims_readline(Dict *primdict) {
 	X(historyexpand);
 	X(resetterminal);
 	X(setmaxhistorylength);
+	X(setrlhook);
 	return primdict;
 }
 #endif
