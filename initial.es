@@ -665,6 +665,7 @@ fn-%is-interactive	= $&isinteractive
 
 if {~ <=$&primitives readline} {
 	fn-%read-line = $&readline
+	. completion.es
 } {~ <=$&primitives linenoise} {
 	fn-%read-line = $&linenoise
 } {
@@ -838,7 +839,6 @@ max-eval-depth	= 640
 #	interpreter loop.
 
 noexport = noexport pid signals apid bqstatus fn-%dispatch path home matchexpr
-
 
 #
 # Title

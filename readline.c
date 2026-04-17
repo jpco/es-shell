@@ -232,6 +232,201 @@ static char *prim_completion(const char *text, int state) {
 	return list_completion(text, state, primswithprefix);
 }
 
+typedef enum {
+	NORMAL,
+	SYNTAX_ERROR,
+	FDBRACES
+} CompletionType;
+
+/* hmm. */
+extern const char nw[];
+
+/* Scan line back to its start. */
+/* This is a lot of code, and a poor reimplementation of the parser. :( */
+CompletionType boundcmd(char **start) {
+	char *line = rl_line_buffer;
+	char syntax[128] = { 0 };
+	int lp, sp = 0;
+	Boolean quote = FALSE, first_word = TRUE;
+
+	for (lp = rl_point; lp > 0; lp--) {
+		if (quote)
+			continue;
+
+		switch (line[lp]) {
+		/* quotes. pretty easy */
+		case '\'':
+			quote = !quote;
+			continue;
+
+		/* "stackable" syntax.  remember, we're moving backwards */
+		case '}':
+			syntax[sp++] = '{';
+			break;
+		case '{':
+			if (sp == 0) {
+				*start = rl_line_buffer + lp + 1;
+				return NORMAL;
+			}
+			if (syntax[--sp] != '{') {
+				*start = rl_line_buffer;
+				return SYNTAX_ERROR;
+			}
+			break;
+		case ')':
+			syntax[sp++] = '(';
+			break;
+		case '(':
+			if (sp > 0) {
+				if (syntax[--sp] != '(') {
+					*start = rl_line_buffer;
+					return SYNTAX_ERROR;
+				}
+			} else {
+				/* TODO: make `<=(a b` work */
+				first_word = TRUE;
+			}
+			break;
+
+		/* command separator chars */
+		case ';':
+			if (sp == 0) {
+				*start = rl_line_buffer + lp + 1;
+				return NORMAL;
+			}
+			break;
+		case '&':
+			if (sp == 0) {
+				*start = rl_line_buffer + lp + 1;
+				return NORMAL;
+			}
+			break;
+		case '|':
+			if (sp == 0) {
+				int pp = lp+1;
+				Boolean inbraces = FALSE;
+				if (pp < rl_point && line[pp] == '[') {
+					inbraces = TRUE;
+					while (pp < rl_point) {
+						if (line[pp++] == ']') {
+							inbraces = FALSE;
+							break;
+						}
+					}
+				}
+				*start = rl_line_buffer + pp;
+				return inbraces ? FDBRACES : NORMAL;
+			}
+			break;
+		case '`':
+			if (first_word) {
+				*start = rl_line_buffer + lp + 1;
+				return NORMAL;
+			}
+			break;
+		case '<':
+			if (first_word && lp < rl_point - 1 && line[lp+1] == '=') {
+				*start = rl_line_buffer + lp + 2;
+				return NORMAL;
+			}
+			break;
+		}
+		if (nw[(unsigned char)line[lp]])
+			first_word = FALSE;
+	}
+	/* TODO: fetch previous lines if sp > 0 */
+	*start = rl_line_buffer;
+	return NORMAL;
+}
+
+/* calls `%complete prefix word` to get a list of candidates for how to complete
+ * `word`.
+ *
+ * TODO: improve argv for %complete
+ *  - special dispatch for special syntax
+ *  - split up args in a syntax-aware way
+ *  - dequote args before and requote after (already done, just do it better)
+ *  - skip/handle "command-irrelevant" syntax
+ *      ! redirections binders
+ *  - MAYBE: provide raw command/point?
+ *
+ * all the new behaviors above should ideally be done "manually", so that %complete
+ * can be used the same way without worrying about the line editing library.
+ *
+ * Handle the following properly, though maybe not in this function
+ *   `let (a =`
+ *   `let (a = b)`
+ *   `a =`
+ *   `a > `
+ *   `!`
+ *   `$(f`
+ */
+
+static List *callcomplete(const char *word) {
+	int len;
+	char *start;
+	CompletionType type;
+
+	Ref(List *, result, NULL);
+	Ref(List *, fn, NULL);
+	if ((fn = varlookup("fn-%complete", NULL)) == NULL) {
+		RefPop(fn);
+		return NULL;
+	}
+	type = boundcmd(&start);
+
+	if (type == FDBRACES) {
+		/* TODO: fd completion */
+		RefPop2(result, fn);
+		return NULL;
+	}
+
+	len = rl_point - (start - rl_line_buffer) - strlen(word);
+	if (len < 0) {	/* TODO: fix `word` for `|[2]` and delete this hack */
+		len = 0;
+		word = "";
+	}
+	Ref(char *, line, gcndup(start, len));
+	gcdisable();
+	fn = append(fn, mklist(mkstr(line),
+				mklist(mkstr(str("%s", word)), NULL)));
+	gcenable();
+	result = eval(fn, NULL, 0);
+	RefEnd2(line, fn);
+	RefReturn(result);
+}
+
+static char *es_completion(const char *text, int state) {
+	return list_completion(text, state, callcomplete);
+}
+
+List *completion_to_file;
+
+/* TODO: does callcompletiontofile perform unquoting/requoting correctly? */
+static int callcompletiontofile(char **filep) {
+	List *result;
+	if (completion_to_file == NULL)
+		return 0;
+	Ref(List *, call, NULL);
+	gcdisable();
+	call = append(completion_to_file, mklist(mkstr(*filep), NULL));
+	gcenable();
+	result = eval(call, NULL, 0);
+	RefEnd(call);
+	switch (length(result)) {
+	case 0:
+		return 0;
+	case 1:
+		if (streq(*filep, getstr(result->term)))
+			return 0;
+		/* move into ealloc-space */
+		*filep = mprint("%E", result->term);
+		return 1;
+	default:
+		fail("%completion-to-file", "completion-filename mapping must return one value");
+	}
+}
+
 static int matchcmp(const void *a, const void *b) {
 	return strcoll(*(const char **)a, *(const char **)b);
 }
@@ -252,7 +447,7 @@ rl_compentry_func_t *select_completion(const char *text, char **prefix) {
 		/* ~foo => username.  ~foo/bar gets completed as a filename. */
 		return rl_username_completion_function;
 	}
-	return rl_filename_completion_function;
+	return es_completion;
 }
 
 static rl_compentry_func_t *completion_func = NULL;
@@ -261,6 +456,7 @@ static rl_compentry_func_t *completion_func = NULL;
  * Otherwise, performs a completion based on the prefix of the text. */
 char **builtin_completion(const char *text, int UNUSED start, int UNUSED end) {
 	char **matches = NULL, *qp = NULL, *prefix = "";
+	Push ctf;
 	/* Manually unquote the text, since we told readline not to. */
 	char *t = unquote(text, &qp);
 	rl_compentry_func_t *completion;
@@ -271,7 +467,17 @@ char **builtin_completion(const char *text, int UNUSED start, int UNUSED end) {
 	} else
 		completion = select_completion(text, &prefix);
 
+	if (completion == es_completion)
+		varpush(&ctf, "fn-%completion-to-file", NULL);
+
 	matches = rl_completion_matches(t+strlen(prefix), completion);
+
+	if (completion == es_completion) {
+		completion_to_file = varlookup("fn-%completion-to-file", NULL);
+		if (completion_to_file != NULL)
+			rl_filename_completion_desired = 1;
+		varpop(&ctf);
+	}
 
 	/* Manually sort and then re-quote the matches. */
 	if (matches != NULL) {
@@ -341,6 +547,8 @@ static int es_complete_primitive(int UNUSED count, int UNUSED key) {
 }
 
 static void initreadline(void) {
+	globalroot(&completion_to_file);
+
 	rl_readline_name = "es";
 
 	/* this word_break_characters excludes '&' due to primitive completion */
@@ -353,6 +561,8 @@ static void initreadline(void) {
 	rl_filename_stat_hook = unquote_for_stat;
 	rl_attempted_completion_function = builtin_completion;
 	rl_completion_display_matches_hook = display_matches;
+	rl_directory_rewrite_hook = callcompletiontofile;
+	rl_filename_stat_hook = callcompletiontofile;
 
 	rl_add_funmap_entry("es-complete-filename", es_complete_filename);
 	rl_add_funmap_entry("es-complete-variable", es_complete_variable);
