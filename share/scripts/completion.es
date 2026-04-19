@@ -80,8 +80,11 @@ fn %complete prefix word {
 #	completion function.  Calling this is strongly recommended instead of
 #	directly calling `%complete-$fnname` for any completion function other
 #	than those found in this file.
+#
+#	TODO: Refactor %complete-fn so that it can be better used to let-bind
+#	old definitions of spoofed functions (see cdpath.es for an example).
 
-completion-path = /home/jpco/git/es-shell/completions
+completion-path = /usr/local/share/es/completions
 
 fn %complete-fn func prefix word {
 	if {~ $#(fn-%complete-^$func) 0} {

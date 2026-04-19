@@ -110,7 +110,7 @@ y.tab.c	: token.h
 version.h : mkversion
 	(cd $(srcdir) && sh mkversion) > version.h
 
-initial.c : esdump $(srcdir)/initial.es $(srcdir)/completion.es
+initial.c : esdump $(srcdir)/initial.es
 	./esdump < $(srcdir)/initial.es > initial.c
 
 sigmsgs.c : mksignal $(SIGFILES)

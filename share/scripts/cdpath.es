@@ -29,6 +29,52 @@ fn cd dir {
 
 fn %cdpathsearch name { access -n $name -1e -d $cdpath }
 
+# Completions for %cdpathsearch and the cd that uses it.  These are directly
+# defined rather than messing with $completion-path -- that should be changed,
+# in part because that would allow users to source cdpath.es and completion.es
+# in whatever order they want.
+
+fn %complete-%cdpathsearch _ word {
+	let (dirs = ()) {
+		for (p = $cdpath)
+		for (w = $p/$word^*)
+		if {access -d -- $w} {
+			dirs = $dirs <={~~ $w $p/*}
+		}
+		result $dirs
+	}
+}
+
+# Call `%complete-fn cd` for the side effect of loading it into the environment
+# so we can stow it in `compl`.  Obviously pretty bogus.  Also, should we define
+# %completion-to-function in %complete-%cdpathsearch and make use of that in
+# %complete-cd?
+
+local (fn-%completion-to-file = ())
+	{} <={%complete-fn cd}
+
+let (compl = $fn-%complete-cd)
+fn %complete-cd p word {
+	let (result = <={%complete-%cdpathsearch $p $word}) {
+		# Do this in an assignment rather than in the `let` to make sure
+		# %completion-to-file is set by $compl
+		result = $result <={$compl $p $word}
+
+		let (ctf = $fn-%completion-to-file)
+		fn %completion-to-file f {
+			let (r = <={if {!~ $#ctf 0} {$ctf $f} {result}})
+			if {!~ $#r 0 && access -d $r} {
+				result $r
+			} {
+				catch @ {result $f} {
+					%cdpathsearch $f
+				}
+			}
+		}
+		result $result
+	}
+}
+
 # cdpath and CDPATH contain the list of directories to search for cd.  They
 # follow the convention that the uppercase CDPATH contains a single colon-
 # separated word which is understandable to other CDPATH-using shells, while

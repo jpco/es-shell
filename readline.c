@@ -446,8 +446,10 @@ rl_compentry_func_t *select_completion(const char *text, char **prefix) {
 	} else if (*text == '~' && !strchr(text, '/')) {
 		/* ~foo => username.  ~foo/bar gets completed as a filename. */
 		return rl_username_completion_function;
+	} else if (varlookup("fn-%complete", NULL) != NULL) {
+		return es_completion;
 	}
-	return es_completion;
+	return rl_filename_completion_function;
 }
 
 static rl_compentry_func_t *completion_func = NULL;
