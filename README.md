@@ -14,16 +14,16 @@ roughly descending priority.  Many of these interact with each other.
 -   Input extensibility.  This is the extensibility that every other shell has
     completely lapped _es_ on at this point -- and for some shells, like zsh,
     interactive features are practically the entire selling point of the shell.
-    I recently (see [this page](https://jpco.io/es/input.html)) refactored input
+    I recently (see [this post](https://jpco.io/es/input.html)) refactored input
     internally so that it can support real extensibility, but very little has
     been added so far.
 
 -   Job control.  Sorry to the job-control haters, but I have been surprised at
     how many people still use the busted, old job-control branch in the repo,
     and to me that indicates that people still really care about it.  I think
-    those people deserve "first-class" support in the shell.  I also think my
-    design (see the newjobcontrol2 branch) isn't too disruptive to those who
-    don't want job control.
+    those people deserve to have it as a properly-supported set of mechanisms in
+    the shell.  I also think my design (see the newjobcontrol2 branch) isn't too
+    disruptive to those who don't want job control.
 
 -   Runtime extensibility.  See the es-main branch.  I would probably want to
     merge this into upstream piecemeal; there are a lot of ideas in that change
@@ -44,15 +44,30 @@ roughly descending priority.  Many of these interact with each other.
     inputs in builtins such as `%split` (as an example, just try to `%split` on
     a multi-byte character!)
 
--   Small syntax/ergonomic changes.  These are probably the least-worthwile
-    changes I want, but for example: `catch` could specify an exception that
-    will be caught instead of always catching everything; `$$x(2)` could have
-    different precedence than `$($x(2))`; `cmd < <{foo}` could work;
-    `$x(3 ... 1)` could return elements in reverse order rather than an empty
-    list.
-
 -   Fixing closure serialization to resolve the recursive-closure problem and
     the shared-closure problem.  Someday!
+
+Some additional, "nitpicky" changes I may not be able to justify getting into
+the shell, especially when backwards-incompatible:
+
+-   Allowing `catch` to specify an exception to catch, which would cause all
+    other exceptions to be passed through
+
+-   Removing the `retry` exception
+
+-   Changing the precedence of nested subscripts like `$$x(2)` to be different
+    from `$($x(2))`
+
+-   Changing `$x(3 ... 1)` to return the first three elements of `$x` in reverse
+    order
+
+-   No longer binding `$0` to the name of the currently-evaluating function
+
+-   Improving shell syntax to support redirecting from input substitutions, like
+    `cmd < <{foo}`
+
+-   Changing certain builtins, such as `umask`, to work via settor functions
+    rather than traditional-style builtins
 
 Some "further out" things I haven't messed with yet but which would be
 interesting to explore:
