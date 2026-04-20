@@ -75,7 +75,6 @@ fn-if		= $&if
 fn-newpgrp	= $&newpgrp
 fn-result	= $&result
 fn-throw	= $&throw
-fn-umask	= $&umask
 fn-wait		= $&wait
 
 #	eval runs its arguments by turning them into a code fragment
@@ -111,6 +110,18 @@ fn %read {
 		result $r
 	} {
 		%flatten '' $r
+	}
+}
+
+#	The umask builtin provides a familiar-looking wrapper around the umask
+#	variable.
+
+fn umask m {
+	if {~ $#m 0} {
+		echo $umask
+	} {
+		umask = $m
+		true
 	}
 }
 
@@ -770,6 +781,7 @@ set-PATH = @ { local (set-path = ) path = <={%fsplit  : $*}; result $* }
 #	These settor functions call primitives to set data structures used
 #	inside of es.
 
+set-umask		= $&setumask
 set-signals		= $&setsignals
 set-noexport		= $&setnoexport
 set-max-eval-depth	= $&setmaxevaldepth

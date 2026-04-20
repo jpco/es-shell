@@ -22,6 +22,12 @@
 
 #include <sys/stat.h>
 
+extern void initumask(void) {
+	int mask = umask(0);
+	umask(mask);
+	vardef("umask", NULL, mklist(mkstr(str("%04o", mask)), NULL));
+}
+
 PRIM(newpgrp) {
 	int e;
 	pid_t pgid;
@@ -70,25 +76,17 @@ PRIM(run) {
 	RefReturn(lp);
 }
 
-PRIM(umask) {
-	if (list == NULL) {
-		int mask = umask(0);
-		umask(mask);
-		print("%04o\n", mask);
-		return ltrue;
-	}
-	if (list->next == NULL) {
-		int mask;
-		char *s, *t;
-		s = getstr(list->term);
-		mask = strtol(s, &t, 8);
-		if ((t != NULL && *t != '\0') || ((unsigned) mask) > 07777)
-			fail("$&umask", "bad umask: %s", s);
-		umask(mask);
-		return ltrue;
-	}
-	fail("$&umask", "usage: umask [mask]");
-	NOTREACHED;
+PRIM(setumask) {
+	if (list == NULL || list->next != NULL)
+		fail("$&setumask", "usage: $&setumask mask");
+	int mask;
+	char *s, *t;
+	s = getstr(list->term);
+	mask = strtol(s, &t, 8);
+	if ((t != NULL && *t != '\0') || ((unsigned) mask) > 07777)
+		fail("$&setumask", "bad umask: %s", s);
+	umask(mask);
+	return mklist(mkstr(str("%04o", mask)), NULL);
 }
 
 PRIM(cd) {
@@ -473,7 +471,7 @@ PRIM(execfailure) {
 extern Dict *initprims_sys(Dict *primdict) {
 	X(newpgrp);
 	X(background);
-	X(umask);
+	X(setumask);
 	X(cd);
 	X(fork);
 	X(run);

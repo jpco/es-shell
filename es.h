@@ -319,6 +319,11 @@ extern void initprims(void);
 extern List *primswithprefix(const char *prefix);
 
 
+/* prim-sys.c */
+
+extern void initumask(void);
+
+
 /* split.c */
 
 extern void startsplit(const char *sep, Boolean coalesce);

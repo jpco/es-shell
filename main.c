@@ -184,6 +184,7 @@ getopt_done:
 
 		initpath();
 		initpid();
+		initumask();
 		initsignals(runflags & run_interactive, allowquit);
 		initpgrp();
 		hidevariables();
