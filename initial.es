@@ -600,16 +600,12 @@ if {~ <=$&primitives execfailure} {fn-%exec-failure = $&execfailure}
 #	by $history if that variable is set and the file it points to
 #	exists and is writeable.
 
-if {~ <=$&primitives writehistory} {
-	fn-%write-history = $&writehistory
-} {
-	fn %write-history input {
-		if {!~ $history ()} {
-			if {access -w $history} {
-				echo $input >> $history
-			} {
-				history = ()
-			}
+fn %write-history input {
+	if {!~ $history ()} {
+		if {access -w $history} {
+			echo $input >> $history
+		} {
+			history = ()
 		}
 	}
 }
@@ -663,13 +659,9 @@ if {~ <=$&primitives writehistory} {
 fn-%batch-loop		= $&batchloop
 fn-%is-interactive	= $&isinteractive
 
-if {~ <=$&primitives readline} {
-	fn-%read-line = $&readline
-} {
-	fn %read-line prompt {
-		echo -n $prompt
-		$&read
-	}
+fn %read-line prompt {
+	echo -n $prompt
+	$&read
 }
 
 fn %parse {
@@ -774,30 +766,6 @@ set-signals		= $&setsignals
 set-noexport		= $&setnoexport
 set-max-eval-depth	= $&setmaxevaldepth
 
-#	If the primitives $&sethistory or $&resetterminal are defined (meaning
-#	that readline or editline is being used), setting the variables $TERM,
-#	$TERMCAP, or $history should notify the line editor library.
-
-if {~ <=$&primitives sethistory} {
-	set-history = $&sethistory
-}
-
-if {~ <=$&primitives resetterminal} {
-	set-TERM	= @ { $&resetterminal; result $* }
-	set-TERMCAP	= @ { $&resetterminal; result $* }
-}
-
-#	The primitive $&setmaxhistorylength is another readline-only primitive
-#	which limits the length of the in-memory history list, to reduce memory
-#	size implications of a large history file.  Setting max-history-length
-#	to 0 clears the history list and disables adding anything more to it.
-#	Unsetting max-history-length allows the history list to grow unbounded.
-
-if {~ <=$&primitives setmaxhistorylength} {
-	set-max-history-length = $&setmaxhistorylength
-	max-history-length = 5000
-}
-
 
 #
 # Variables
@@ -827,11 +795,27 @@ noexport = noexport pid signals apid bqstatus fn-%dispatch path home matchexpr
 
 
 #
-# Title
+# Extra scripts
 #
 
-#	This is silly and useless, but whatever value is returned here
-#	is printed in the header comment in initial.c;  nobody really
-#	wants to look at initial.c anyway.
+#	We want to be able to build an es from more than just one big initial
+#	script and primitive list.  Initially we use readline as the guinea pig
+#	for all this, but we can add more as well.
 
-result es initial state built in `/bin/pwd on `/bin/date for <=$&version
+LIBS	= ()
+CFLAGS	= ()
+OFILES	= ()
+
+# This should be controllable by the person calling `make'
+extras = prim/readline/readline.es
+
+for (e = $extras) {
+	. $e	# TODO: working dir problems?
+}
+
+# remove special build variables
+local (LIBS = (); CFLAGS = (); OFILES = ()) {
+	# TODO: $&dump
+}
+
+# TODO: call final `make' with the environment all plumped up

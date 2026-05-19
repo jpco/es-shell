@@ -47,9 +47,6 @@ extern void initprims(void) {
 	prims = initprims_sys(prims);
 	prims = initprims_proc(prims);
 	prims = initprims_access(prims);
-#if HAVE_READLINE
-	prims = initprims_readline(prims);
-#endif
 
 #define	primdict prims
 	X(primitives);

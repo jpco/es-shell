@@ -1,0 +1,33 @@
+removed:
+ - building readline.c and readline.o, obviously
+ - $&readline et al in list of prims to init
+ - @READLINE_LIBS@ (for -L and -l) and @READLINE_CFLAGS@ (for -I)
+
+CURRENT build process:
+ - .o files are built (incl. parser gen, mksignal, etc.)
+ - esdump is linked - inputs: .o files
+ - esdump runs initial.es
+    - esdump produces initial.c
+ - es is linked - inputs: initial.c, libs, cflag, ldflags
+
+WANT build process:
+ - core .o files are built (incl. parser gen, mksignal, etc.)
+ - esdump is linked - inputs: .o files
+ - esdump runs initial.es
+    - initial.es calls library scripts
+    - library scripts define .c/.o files, provide libs, cflags, ldflags
+    - esdump produces initial.c
+ - additional .o files are built with appropriate cflags
+ - es is linked - inputs: initial.c, libs, cflags, ldflags
+
+WANT more concretely:
+ - core Makefile builds core .o files
+ - core Makefile builds esdump
+ - core Makefile runs esdump
+    - esdump runs initial.es
+       - initial.es sources library scripts
+          - library scripts build .o files with their own CFLAGS
+          - library scripts modify OFILES, LIBS, LDFLAGS, and normal es vars
+    - esdump produces initial.c
+    - esdump calls final Makefile with .o files, LIBS, LDFLAGS in env
+       - final Makefile links es binary
