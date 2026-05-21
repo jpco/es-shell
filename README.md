@@ -2,10 +2,10 @@ This is jpco's fork of the extensible shell.  Very little interesting is in the
 `main` branch; it just exists to (imperfectly) track upstream.  Everything is
 in other feature branches which target the upstream master branch.
 
-I am primarily interested in developing on the "upsteam" _es_, rather than
-forking off my own version of _es_; I believe there has been good work happening
-on _es_, but because it's mostly all in individual forks, that good work has
-been fragmented and there hasn't been much real community momentum for years.
+I am primarily interested in developing on the upstream _es_, rather than
+forking off my own version; I believe there has been good work happening on
+_es_, but because it's mostly all in individual forks, that good work has been
+fragmented and there hasn't been much real community momentum for years.
 This is a shame!
 
 Here's a big list of the further development on _es_ I'm interested in, in
@@ -15,8 +15,8 @@ roughly descending priority.  Many of these interact with each other.
     completely lapped _es_ on at this point -- and for some shells, like zsh,
     interactive features are practically the entire selling point of the shell.
     I recently (see [this post](https://jpco.io/es/input.html)) refactored input
-    internally so that it can support real extensibility, but very little has
-    been added so far.
+    so that command input is specified in initial.es, but things like
+    programmable tab completion and keybindings are still to-do.
 
 -   Job control.  Sorry to the job-control haters, but I have been surprised at
     how many people still use the busted, old job-control branch in the repo,
@@ -24,6 +24,11 @@ roughly descending priority.  Many of these interact with each other.
     those people deserve to have it as a properly-supported set of mechanisms in
     the shell.  I also think my design (see the newjobcontrol2 branch) isn't too
     disruptive to those who don't want job control.
+
+-   Extensible primitives.  The set of behavior that can be performed by the es
+    binary itself is quite fixed today, and doesn't need to be.  I am picturing
+    that something relatively modest, like a change to the build process and a
+    contrib/ directory, would be sufficient to be quite useful.
 
 -   Runtime extensibility.  See the es-main branch.  I would probably want to
     merge this into upstream piecemeal; there are a lot of ideas in that change
@@ -43,9 +48,6 @@ roughly descending priority.  Many of these interact with each other.
     ASCII-aware, but it should "understand" locales and better support non-ASCII
     inputs in builtins such as `%split` (as an example, just try to `%split` on
     a multi-byte character!)
-
--   Fixing closure serialization to resolve the recursive-closure problem and
-    the shared-closure problem.  Someday!
 
 Some additional, "nitpicky" changes I may not be able to justify getting into
 the shell, especially when backwards-incompatible:
@@ -76,22 +78,16 @@ interesting to explore:
     tail call optimization, exploring alternative GC strategies, etc.  Using
     bytecode could also make it easier to port _es_ to other
     (non-exception-using) languages, such as Zig, but that isn't something I'm
-    immediately interested in.
+    immediately interested in trying.
 
--   "Pluggable" primitives.  This would play well with input extensibility,
-    allowing alternative line-editing libraries to be used with relatively
-    little fuss.  It would also enable "per-OS" behavior to be added, such as
-    the GUI scripting in Haiku, some capsicum-based mechanism to limit
-    binary invocation in the BSDs, etc.
+-   Extending extensible primitives to more thoroughly transform the shell: it
+    could be possible to swap out the fork/exec concurrency model with a
+    pthreads/spawn-based model, which could allow _es_ to run concurrently
+    internally.  This would require a lot of refactoring in the shell runtime to
+    allow for multi-threaded code, though.
 
--   Building on the above, it could be possible to swap out the fork/exec
-    concurrency model in the shell with a pthreads/spawn-based model, which
-    could allow _es_ to run concurrently internally.  This would require a lot
-    of refactoring in the shell runtime to allow for multi-threaded code,
-    though.
-
--   Also building on the pluggable-primitives idea, further development could be
-    done on the "librarified _es_" concept.  Ideally, "core" _es_ would only
+-   Also building on the extensible-primitives idea, further development could
+    be done on the "librarified _es_" concept.  Ideally, "core" _es_ would only
     require ANSI C, and anything POSIX-y would go in the "library" layer and
     could be swapped out for something Plan 9-y, or Windows-y, etc.
 

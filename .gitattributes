@@ -1,4 +1,6 @@
-test/tests/trip.es text diff
-y.tab.c -diff
-y.tab.h -diff
-token.h -diff
+test/tests/trip.es linguist-generated
+y.tab.c linguist-generated
+y.tab.h linguist-generated
+token.h linguist-generated
+
+*.es linguist-language=Es linguist-detectable
