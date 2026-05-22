@@ -3,6 +3,7 @@
 #include "es.h"
 #include "prim.h"
 
+#include <stdio.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 

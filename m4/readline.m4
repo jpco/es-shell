@@ -66,7 +66,7 @@ AC_DEFUN([_ES_CHECK_READLINE], [
 # - termcap
 #
 # If linking fails after all attempts, es_cv_readline_libs is set to "no", and ACTION-IF-FAILURE is executed.
-# Otherwise, es_cv_readline_libs contains the required libraries, the HAVE_READLINE preprocessor macro is defined, and ACTION-IF-SUCCESS is executed.
+# Otherwise, es_cv_readline_libs contains the required libraries, and ACTION-IF-SUCCESS is executed.
 AC_DEFUN([ES_CHECK_READLINE], [
   _ES_CHECK_READLINE($@)
   AS_VAR_IF([es_cv_readline_libs], [no], [
@@ -74,7 +74,6 @@ AC_DEFUN([ES_CHECK_READLINE], [
     AC_SUBST([READLINE_CFLAGS], [])
     AC_SUBST([READLINE_LIBS], [])
   ], [
-    AC_DEFINE([HAVE_READLINE], [1], [Define to 1 if you have readline.])
     AC_SUBST([READLINE_CFLAGS], [${es_cv_readline_cflags-}])
     AC_SUBST([READLINE_LIBS], [$es_cv_readline_libs])
   ])
