@@ -1,6 +1,6 @@
 # Makefile include for readline primitives
 
-# TODO: make this work with @READLINE_CFLAGS@ and @READLINE_LIBS@
+CFLAGS	+= 
 LIBS	+= -lreadline
 CFILES	+= prims/readline.c
 OFILES	+= prims/readline.o

@@ -1,0 +1,8 @@
+# Makefile include for readline primitives
+
+CFLAGS	+= @READLINE_CFLAGS@
+LIBS	+= @READLINE_LIBS@
+CFILES	+= prims/readline.c
+OFILES	+= prims/readline.o
+
+prims/readline.o : prims/readline.c es.h config.h stdenv.h prim.h

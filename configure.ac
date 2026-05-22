@@ -140,5 +140,5 @@ AC_SUBST(SIGFILES, $es_cv_sigfiles)
 
 AC_DEFINE_UNQUOTED(LIMIT_T, $es_cv_rlimit_t, [What type are your limits?])
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES(Makefile prims/readline.mk)
 AC_OUTPUT
