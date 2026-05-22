@@ -593,23 +593,14 @@ fn %pathsearch name { access -n $name -1e -xf $path }
 if {~ <=$&primitives execfailure} {fn-%exec-failure = $&execfailure}
 
 #	The %write-history hook is used in interactive contexts to write
-#	command input to the history file (and/or readline's in-memory
-#	history log).  By default, $&writehistory (which is available if
-#	readline is compiled in) will write to readline's history log if
-#	$max-history-length allows, and will write to the file designated
-#	by $history if that variable is set and the file it points to
-#	exists and is writeable.
+#	command input to the history file.
 
-if {~ <=$&primitives writehistory} {
-	fn-%write-history = $&writehistory
-} {
-	fn %write-history input {
-		if {!~ $history ()} {
-			if {access -w $history} {
-				echo $input >> $history
-			} {
-				history = ()
-			}
+fn %write-history input {
+	if {!~ $history ()} {
+		if {access -w $history} {
+			echo $input >> $history
+		} {
+			history = ()
 		}
 	}
 }
@@ -663,13 +654,9 @@ if {~ <=$&primitives writehistory} {
 fn-%batch-loop		= $&batchloop
 fn-%is-interactive	= $&isinteractive
 
-if {~ <=$&primitives readline} {
-	fn-%read-line = $&readline
-} {
-	fn %read-line prompt {
-		echo -n $prompt
-		$&read
-	}
+fn %read-line prompt {
+	echo -n $prompt
+	$&read
 }
 
 fn %parse {
@@ -774,30 +761,6 @@ set-signals		= $&setsignals
 set-noexport		= $&setnoexport
 set-max-eval-depth	= $&setmaxevaldepth
 
-#	If the primitives $&sethistory or $&resetterminal are defined (meaning
-#	that readline or editline is being used), setting the variables $TERM,
-#	$TERMCAP, or $history should notify the line editor library.
-
-if {~ <=$&primitives sethistory} {
-	set-history = $&sethistory
-}
-
-if {~ <=$&primitives resetterminal} {
-	set-TERM	= @ { $&resetterminal; result $* }
-	set-TERMCAP	= @ { $&resetterminal; result $* }
-}
-
-#	The primitive $&setmaxhistorylength is another readline-only primitive
-#	which limits the length of the in-memory history list, to reduce memory
-#	size implications of a large history file.  Setting max-history-length
-#	to 0 clears the history list and disables adding anything more to it.
-#	Unsetting max-history-length allows the history list to grow unbounded.
-
-if {~ <=$&primitives setmaxhistorylength} {
-	set-max-history-length = $&setmaxhistorylength
-	max-history-length = 5000
-}
-
 
 #
 # Variables
@@ -824,6 +787,15 @@ max-eval-depth	= 640
 #	interpreter loop.
 
 noexport = noexport pid signals apid bqstatus fn-%dispatch path home matchexpr
+
+
+#
+# Run extension scripts
+#
+
+for (file = $*) {
+	. $file
+}
 
 
 #

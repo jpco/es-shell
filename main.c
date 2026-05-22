@@ -180,7 +180,7 @@ getopt_done:
 		initprims();
 		initvars();
 
-		runinitial();
+		runinitial(argp);
 
 		initpath();
 		initpid();

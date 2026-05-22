@@ -287,7 +287,8 @@ static void printheader(List *title) {
 	print("%s\n\n", PPSTRING(TreeTypes));
 }
 
-extern void runinitial(void) {
+extern void runinitial(List *args) {
+	vardef("*", NULL, args);
 	List *title = runfd(0, "initial.es", 0);
 	
 	gcdisable();
@@ -306,7 +307,7 @@ extern void runinitial(void) {
 	print("\t{ NULL, NULL }\n");
 	print("};\n\n");
 
-	print("\nextern void runinitial(void) {\n");
+	print("\nextern void runinitial(List UNUSED *args) {\n");
 	print("\tint i;\n");
 	print("\tfor (i = 0; defs[i].name != NULL; i++)\n");
 	print("\t\tvardef((char *) defs[i].name, NULL, (List *) defs[i].value);\n");

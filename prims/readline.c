@@ -3,8 +3,6 @@
 #include "es.h"
 #include "prim.h"
 
-#if HAVE_READLINE
-
 #include <readline/readline.h>
 #include <readline/history.h>
 
@@ -505,4 +503,3 @@ extern Dict *initprims_readline(Dict *primdict) {
 	X(setmaxhistorylength);
 	return primdict;
 }
-#endif

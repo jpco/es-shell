@@ -91,7 +91,7 @@ extern Boolean gcinfo;			/* -I */
 
 /* initial.c (for es) or dump.c (for esdump) */
 
-extern void runinitial(void);
+extern void runinitial(List *args);
 
 
 /* fd.c */
