@@ -1,0 +1,12 @@
+#!/bin/sh
+
+for i in $*; do
+	echo "extern Dict *initprims_$i(Dict *primdict);"
+done
+
+echo "#define INIT_EXTRA_PRIMS \\"
+
+for i in $*; do
+	echo "	prims = initprims_$i(prims); \\"
+done
+echo

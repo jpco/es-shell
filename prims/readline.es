@@ -11,9 +11,8 @@ if {~ <=$&primitives resetterminal} {
 
 fn-%write-history = $&writehistory
 
-# esdump gets mad at you if you set the settor function first... problem?
-max-history-length = 5000
 set-max-history-length = $&setmaxhistorylength
+max-history-length = 5000
 
 if {~ <=$&primitives sethistory} {
 	set-history = $&sethistory

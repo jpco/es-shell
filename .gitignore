@@ -42,6 +42,7 @@ y.tab.h
 initial.c
 sigmsgs.c
 version.h
+extra_prims.h
 es
 esdump
 testrun

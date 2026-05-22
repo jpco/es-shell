@@ -2,6 +2,7 @@
 
 #include "es.h"
 #include "prim.h"
+#include "extra_prims.h"
 
 static Dict *prims;
 
@@ -47,6 +48,8 @@ extern void initprims(void) {
 	prims = initprims_sys(prims);
 	prims = initprims_proc(prims);
 	prims = initprims_access(prims);
+
+	INIT_EXTRA_PRIMS;
 
 #define	primdict prims
 	X(primitives);
