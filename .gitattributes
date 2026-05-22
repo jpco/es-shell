@@ -3,4 +3,5 @@ y.tab.c linguist-generated
 y.tab.h linguist-generated
 token.h linguist-generated
 
-*.es linguist-language=Es linguist-detectable
+*.es	linguist-language=Shell
+*.esrc	linguist-language=Shell
