@@ -55,6 +55,10 @@ then
 	AC_DEFINE(KERNEL_POUNDBANG, [1], [Does your kernel support #!?])
 fi
 
+dnl extras. TODO do this for real.
+AC_SUBST(EXTRAS, ['readline somethingelse'])
+AC_SUBST(EXTMAKEFILES, ['prims/readline.mk prims/somethingelse.mk'])
+AC_SUBST(EXTSCRIPTS, ['prims/readline.es prims/somethingelse.es'])
 
 dnl Checks for libraries.
 
@@ -140,5 +144,6 @@ AC_SUBST(SIGFILES, $es_cv_sigfiles)
 
 AC_DEFINE_UNQUOTED(LIMIT_T, $es_cv_rlimit_t, [What type are your limits?])
 
+dnl TODO set correct values here
 AC_CONFIG_FILES(Makefile prims/readline.mk)
 AC_OUTPUT
