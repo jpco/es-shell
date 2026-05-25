@@ -36,7 +36,7 @@ PRIM(newpgrp) {
 }
 
 PRIM(background) {
-	int pid = efork(TRUE, TRUE);
+	int pid = efork(TRUE);
 	if (pid == 0) {
 #if JOB_PROTECT
 		/* job control safe version: put it in a new pgroup, if interactive. */
@@ -50,14 +50,11 @@ PRIM(background) {
 }
 
 PRIM(fork) {
-	int pid, status;
-	pid = efork(TRUE, FALSE);
+	int pid;
+	pid = efork(TRUE);
 	if (pid == 0)
 		esexit(exitstatus(eval(list, NULL, evalflags | eval_inchild)));
-	status = ewaitfor(pid);
-	SIGCHK();
-	printstatus(0, status);
-	return mklist(mkstr(mkstatus(status)), NULL);
+	return ewaitfor(pid);
 }
 
 PRIM(run) {
@@ -383,26 +380,26 @@ static void strtimes(struct times time, List *list) {
 }
 
 PRIM(time) {
-	int pid, status;
+	int pid;
 	struct times prev, time;
 
+	Ref(List *, result, NULL);
 	Ref(List *, lp, list);
 
 	gc();	/* do a garbage collection first to ensure reproducible results */
 	gettimes(&prev);
-	pid = efork(TRUE, FALSE);
+	pid = efork(TRUE);
 	if (pid == 0)
 		esexit(exitstatus(eval(lp, NULL, evalflags | eval_inchild)));
-	status = ewait(pid, FALSE);
+	result = ewait(pid, FALSE);
 	gettimes(&time);
 	SIGCHK();
-	printstatus(0, status);
 
 	subtimes(time, prev, &time);
 	strtimes(time, lp);
 
 	RefEnd(lp);
-	return mklist(mkstr(mkstatus(status)), NULL);
+	RefReturn(result);
 }
 #endif	/* BUILTIN_TIME */
 

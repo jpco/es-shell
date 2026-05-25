@@ -25,25 +25,18 @@ static Noreturn failexec(char *file, List *args) {
 
 /* forkexec -- fork (if necessary) and exec */
 extern List *forkexec(char *file, List *list, Boolean inchild) {
-	int pid, status;
+	int pid;
 	Vector *env;
 	gcdisable();
 	env = mkenv();
-	pid = efork(!inchild, FALSE);
+	pid = efork(!inchild);
 	if (pid == 0) {
 		execve(file, vectorize(list)->vector, env->vector);
 		failexec(file, list);
 	}
 	gcenable();
-	status = ewaitfor(pid);
-	if ((status & 0xff) == 0) {
-		sigint_newline = FALSE;
-		SIGCHK();
-		sigint_newline = TRUE;
-	} else
-		SIGCHK();
-	printstatus(0, status);
-	return mklist(mkterm(mkstatus(status), NULL), NULL);
+	/* FIXME: sigint_newline */
+	return ewaitfor(pid);
 }
 
 /* assign -- bind a list of values to a list of variables */

@@ -62,21 +62,3 @@ extern char *mkstatus(int status) {
 	}
 	return str("%d", WEXITSTATUS(status));
 }
-
-/* printstatus -- print the status if we should */
-extern void printstatus(int pid, int status) {
-	if (WIFSIGNALED(status)) {
-		const char *msg = sigmessage(WTERMSIG(status)), *tail = "";
-		if (WCOREDUMP(status)) {
-			tail = "--core dumped";
-			if (*msg == '\0')
-				tail += (sizeof "--") - 1;
-		}
-		if (*msg != '\0' || *tail != '\0') {
-			if (pid == 0)
-				eprint("%s%s\n", msg, tail);
-			else
-				eprint("%d: %s%s\n", pid, msg, tail);
-		}
-	}
-}

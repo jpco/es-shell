@@ -78,6 +78,13 @@ fn-throw	= $&throw
 fn-umask	= $&umask
 fn-wait		= $&wait
 
+fn %reap pid did status {
+	if {~ $did signaled} {
+		echo >[1=2] $pid: <={$&sigmessage $status}
+	}
+	result $status
+}
+
 #	eval runs its arguments by turning them into a code fragment
 #	(in string form) and running that fragment.
 

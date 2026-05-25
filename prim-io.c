@@ -143,7 +143,7 @@ static int pipefork(int p[2], int *extra) {
 		registerfd(extra, FALSE);
 
 	ExceptionHandler
-		pid = efork(TRUE, FALSE);
+		pid = efork(TRUE);
 	CatchExceptionIf (pid != 0, e)
 		unregisterfd(&p[0]);
 		unregisterfd(&p[1]);
@@ -160,7 +160,7 @@ static int pipefork(int p[2], int *extra) {
 }
 
 PRIM(here) {
-	int fd, doclen, p[2], status, ticket = UNREGISTERED;
+	int fd, doclen, p[2], ticket = UNREGISTERED;
 	volatile int pid = -1;
 	List *tail, **tailp;
 
@@ -206,10 +206,8 @@ PRIM(here) {
 
 	undefer(ticket, TRUE);
 	close(p[0]);
-	if (pid > 0) {
-		status = ewaitfor(pid);
-		printstatus(0, status);
-	}
+	if (pid > 0)
+		ewaitfor(pid);
 	RefEnd2(doc, cmd);
 	RefReturn(lp);
 }
@@ -234,7 +232,7 @@ PRIM(pipe) {
 	for (;; list = list->next) {
 		int p[2], pid;
 
-		pid = (list->next == NULL) ? efork(TRUE, FALSE) : pipefork(p, &inpipe);
+		pid = (list->next == NULL) ? efork(TRUE) : pipefork(p, &inpipe);
 
 		if (pid == 0) {		/* child */
 			if (inpipe != -1) {
@@ -263,11 +261,7 @@ PRIM(pipe) {
 
 	Ref(List *, result, NULL);
 	do {
-		Term *t;
-		int status = ewaitfor(pids[--n]);
-		printstatus(0, status);
-		t = mkstr(mkstatus(status));
-		result = mklist(t, result);
+		result = append(ewaitfor(pids[--n]), result);
 	} while (0 < n);
 	if (evalflags & eval_inchild)
 		esexit(exitstatus(result));
@@ -276,7 +270,7 @@ PRIM(pipe) {
 
 #if HAVE_DEV_FD
 PRIM(readfrom) {
-	int pid, p[2], status;
+	int pid, p[2];
 	Push push;
 
 	caller = "$&readfrom";
@@ -308,15 +302,14 @@ PRIM(readfrom) {
 	EndExceptionHandler
 
 	close(p[0]);
-	status = ewaitfor(pid);
-	printstatus(0, status);
+	ewaitfor(pid);
 	varpop(&push);
 	RefEnd3(cmd, input, var);
 	RefReturn(lp);
 }
 
 PRIM(writeto) {
-	int pid, p[2], status;
+	int pid, p[2];
 	Push push;
 
 	caller = "$&writeto";
@@ -348,8 +341,7 @@ PRIM(writeto) {
 	EndExceptionHandler
 
 	close(p[1]);
-	status = ewaitfor(pid);
-	printstatus(0, status);
+	ewaitfor(pid);
 	varpop(&push);
 	RefEnd3(cmd, output, var);
 	RefReturn(lp);
@@ -377,7 +369,8 @@ restart:
 }
 
 PRIM(backquote) {
-	int pid, p[2], status;
+	int pid, p[2];
+	List *st;
 
 	caller = "$&backquote";
 	if (list == NULL)
@@ -397,11 +390,9 @@ PRIM(backquote) {
 	gcdisable();
 	lp = bqinput(sep, p[0]);
 	close(p[0]);
-	status = ewaitfor(pid);
-	printstatus(0, status);
-	lp = mklist(mkstr(mkstatus(status)), lp);
 	gcenable();
-	list = lp;
+	st = ewaitfor(pid);
+	list = append(st, lp);
 	RefEnd2(sep, lp);
 	SIGCHK();
 	return list;

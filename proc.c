@@ -7,7 +7,6 @@ Boolean hasforked = FALSE;
 typedef struct Proc Proc;
 struct Proc {
 	int pid;
-	Boolean background;
 	Proc *next, *prev;
 };
 
@@ -20,22 +19,21 @@ static pid_t tcpgid0;
 #endif
 
 /* mkproc -- create a Proc structure */
-extern Proc *mkproc(int pid, Boolean background) {
+extern Proc *mkproc(int pid) {
 	Proc *proc = ealloc(sizeof (Proc));
 	proc->next = proclist;
 	proc->pid = pid;
-	proc->background = background;
 	proc->prev = NULL;
 	return proc;
 }
 
 /* efork -- fork (if necessary) and clean up as appropriate */
-extern int efork(Boolean parent, Boolean background) {
+extern int efork(Boolean parent) {
 	if (parent) {
 		int pid = fork();
 		switch (pid) {
 		default: {	/* parent */
-			Proc *proc = mkproc(pid, background);
+			Proc *proc = mkproc(pid);
 			if (proclist != NULL)
 				proclist->prev = proc;
 			proclist = proc;
@@ -132,8 +130,23 @@ static Proc *reap(int pid) {
 	return proc;
 }
 
+/* callreap -- call the %reap hook function */
+static List *callreap(int pid, int status) {
+	Ref(List *, call, NULL);
+	call = varlookup("fn-%reap", NULL);
+	if (call == NULL)
+		return NULL;
+	gcdisable();
+	call = append(call, mklist(mkstr(str("%d", pid)),
+				mklist(mkstr(str("%s", WIFSIGNALED(status) ? "signaled" : "exited")),
+					mklist(mkstr(mkstatus(status)), NULL))));
+	gcenable();
+	call = eval(call, NULL, 0);
+	RefReturn(call);
+}
+
 /* ewait -- wait for a specific process to die, or any process if pid == -1 */
-extern int ewait(int pidarg, Boolean interruptible) {
+extern List *ewait(int pidarg, Boolean interruptible) {
 	int deadpid, status;
 	Proc *proc;
 	while ((deadpid = waitpid(pidarg, &status, 0)) == -1) {
@@ -148,10 +161,8 @@ extern int ewait(int pidarg, Boolean interruptible) {
 #if JOB_PROTECT
 	tctakepgrp();
 #endif
-	if (proc->background)
-		printstatus(proc->pid, status);
 	efree(proc);
-	return status;
+	return callreap(deadpid, status);
 }
 
 #include "prim.h"
@@ -159,11 +170,10 @@ extern int ewait(int pidarg, Boolean interruptible) {
 PRIM(apids) {
 	Proc *p;
 	Ref(List *, lp, NULL);
-	for (p = proclist; p != NULL; p = p->next)
-		if (p->background) {
-			Term *t = mkstr(str("%d", p->pid));
-			lp = mklist(t, lp);
-		}
+	for (p = proclist; p != NULL; p = p->next) {
+		Term *t = mkstr(str("%d", p->pid));
+		lp = mklist(t, lp);
+	}
 	/* TODO: sort the return value, but by number? */
 	RefReturn(lp);
 }
@@ -182,7 +192,7 @@ PRIM(wait) {
 		fail("$&wait", "usage: wait [pid]");
 		NOTREACHED;
 	}
-	return mklist(mkstr(mkstatus(ewait(pid, TRUE))), NULL);
+	return ewait(pid, TRUE);
 }
 
 extern Dict *initprims_proc(Dict *primdict) {
