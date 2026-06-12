@@ -20,18 +20,6 @@ static Sighandler handler_in[NSIG];
 sigjmp_buf slowlabel;
 Atomic slow = FALSE;
 
-#if HAVE_SIGACTION
-#ifndef	SA_NOCLDSTOP
-#define	SA_NOCLDSTOP	0
-#endif
-#ifndef	SA_NOCLDWAIT
-#define	SA_NOCLDWAIT	0
-#endif
-#ifndef	SA_INTERRUPT		/* for sunos */
-#define	SA_INTERRUPT	0
-#endif
-#endif
-
 
 /*
  * name<->signal mappings
@@ -77,10 +65,7 @@ static void catcher(int sig) {
 #if SYSV_SIGNALS /* only do this for unreliable signals */
 	signal(sig, catcher);
 #endif
-	if (hasforked)
-		/* exit unconditionally on a signal in a child process */
-		esexit(1);
-	if (caught[sig] == 0) {
+	if (!caught[sig]) {
 		caught[sig] = TRUE;
 		++sigcount;
 	}
@@ -98,7 +83,7 @@ static Sighandler setsignal(int sig, Sighandler handler) {
 	struct sigaction nsa, osa;
 	sigemptyset(&nsa.sa_mask);
 	nsa.sa_handler = handler;
-	nsa.sa_flags = SA_INTERRUPT;
+	nsa.sa_flags = SA_NOCLDSTOP;
 	if (sigaction(sig, &nsa, &osa) == -1)
 		return SIG_ERR;
 	return osa.sa_handler;

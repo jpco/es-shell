@@ -36,7 +36,7 @@ extern List *forkexec(char *file, List *list, Boolean inchild) {
 	}
 	gcenable();
 	status = ewaitfor(pid);
-	if ((status & 0xff) == 0) {
+	if (!WIFSIGNALED(status)) {
 		sigint_newline = FALSE;
 		SIGCHK();
 		sigint_newline = TRUE;
