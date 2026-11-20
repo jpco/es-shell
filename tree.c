@@ -6,9 +6,50 @@
 DefineTag(Tree1, static);
 DefineTag(Tree2, static);
 
+/* wordhasglob -- an unquoted word might trigger tilde or wildcard globbing */
+static Boolean wordhasglob(const char *s) {
+	int c;
+	if (s == NULL)
+		return FALSE;
+	if (*s == '~')
+		return TRUE;
+	for (; (c = *s) != '\0'; s++)
+		if (c == '*' || c == '?' || c == '[')
+			return TRUE;
+	return FALSE;
+}
+
+/* markglob -- recursively mark hasglob flags on a parse tree */
+extern void markglob(Tree *t) {
+	while (t != NULL) {
+		switch (t->kind) {
+		    case nWord: case nQword: case nPrim:
+			return;
+		    case nCall: case nThunk: case nVar:
+			t = t->u[0].p;
+			break;
+		    case nConcat: case nList:
+			markglob(t->u[0].p);
+			markglob(t->u[1].p);
+			t->hasglob = (t->u[0].p != NULL && t->u[0].p->hasglob)
+				  || (t->u[1].p != NULL && t->u[1].p->hasglob);
+			return;
+		    case nAssign: case nClosure: case nFor:
+		    case nLambda: case nLet: case nLocal:
+		    case nVarsub: case nMatch: case nExtract:
+			markglob(t->u[0].p);
+			t = t->u[1].p;
+			break;
+		    default:
+			panic("markglob: bad node kind %d", t->kind);
+		}
+	}
+}
+
 /* gmk -- make a new node; used to generate the parse tree */
 static Tree *gmk(void *(*alloc)(size_t, Tag *), NodeKind t, va_list ap) {
 	Tree *n;
+	Boolean hasglob = FALSE;
 
 	gcdisable();
 	switch (t) {
@@ -17,6 +58,7 @@ static Tree *gmk(void *(*alloc)(size_t, Tag *), NodeKind t, va_list ap) {
 	    case nWord: case nQword: case nPrim:
 		n = alloc(offsetof(Tree, u[1]), &Tree1Tag);
 		n->u[0].s = va_arg(ap, char *);
+		if (t == nWord) hasglob = wordhasglob(n->u[0].s);
 		break;
 	    case nCall: case nThunk: case nVar:
 		n = alloc(offsetof(Tree, u[1]), &Tree1Tag);
@@ -28,6 +70,9 @@ static Tree *gmk(void *(*alloc)(size_t, Tag *), NodeKind t, va_list ap) {
 		n = alloc(offsetof(Tree, u[2]), &Tree2Tag);
 		n->u[0].p = va_arg(ap, Tree *);
 		n->u[1].p = va_arg(ap, Tree *);
+		if (t == nConcat || t == nList)
+			hasglob = (n->u[0].p != NULL && n->u[0].p->hasglob)
+			       || (n->u[1].p != NULL && n->u[1].p->hasglob);
 		break;
 	    case nRedir:
 		n = alloc(offsetof(Tree, u[2]), NULL);
@@ -41,6 +86,7 @@ static Tree *gmk(void *(*alloc)(size_t, Tag *), NodeKind t, va_list ap) {
 		break;
  	}
 	n->kind = t;
+	n->hasglob = hasglob;
 
 	Ref(Tree *, tree, n);
 	gcenable();

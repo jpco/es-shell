@@ -54,6 +54,10 @@ extern List *reverse(List *list) {
 /* append -- merge two lists, non-destructively */
 extern List *append(List *head, List *tail) {
 	List *lp, **prevp;
+	if (head == NULL)
+		return tail;
+	if (head->next == NULL)
+		return mklist(head->term, tail);
 	Ref(List *, hp, head);
 	Ref(List *, tp, tail);
 	gcreserve(40 * sizeof (List));

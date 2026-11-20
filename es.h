@@ -50,6 +50,7 @@ typedef enum {
 
 struct Tree {
 	NodeKind kind;
+	Boolean hasglob;
 	union {
 		Tree *p;
 		char *s;
@@ -139,6 +140,7 @@ extern List *sortlist(List *list);
 /* tree.c */
 
 extern Tree *gcmk(NodeKind VARARGS);	/* gcalloc a tree node */
+extern void markglob(Tree *tree);	/* recursively mark tree nodes' glob */
 
 
 /* closure.c */

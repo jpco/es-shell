@@ -194,6 +194,7 @@ extern Tree *parse(List *reader) {
 	assert(p.ungot == 0);
 	Ref(Tree *, tree, pseal(p.tree));
 	setpspace(oldpspace);
+	markglob(tree);
 #if LISPTREES
 	if (input->runflags & run_lisptrees)
 		eprint("%B\n", tree);

@@ -4,32 +4,40 @@
 #include "gc.h"
 #include "print.h"
 
+#define	STR_STACKSIZE	512
+
 /* grow -- buffer grow function for str() */
 static int str_grow(Format *f, size_t more) {
-	Buffer *buf = expandbuffer(f->u.p, more);
+	Buffer *buf = f->u.p;
+	size_t used = f->buf - f->bufbegin;
+	if (buf == NULL) {
+		buf = openbuffer(used + more);
+		memcpy(buf->str, f->bufbegin, used);
+	} else {
+		buf = expandbuffer(f->u.p, more);
+	}
 	f->u.p		= buf;
-	f->buf		= buf->str + (f->buf - f->bufbegin);
+	f->buf		= buf->str + used;
 	f->bufbegin	= buf->str;
 	f->bufend	= buf->str + buf->len;
 	return 0;
 }
 
 /* strv -- print a formatted string into gc space */
-static char *sstrv(char *(*seal)(Buffer *), const char *fmt, va_list args) {
-	Buffer *buf;
+static char *sstrv(char *(*dup)(const char *), char *(*seal)(Buffer *), const char *fmt, va_list args) {
+	char stackbuf[STR_STACKSIZE];
 	Format format;
 
 	gcdisable();
-	buf = openbuffer(0);
-	format.u.p	= buf;
+	format.u.p	= NULL;
 #if NO_VA_LIST_ASSIGN
 	memcpy(format.args, args, sizeof(va_list));
 #else
 	format.args	= args;
 #endif
-	format.buf	= buf->str;
-	format.bufbegin	= buf->str;
-	format.bufend	= buf->str + buf->len;
+	format.buf	= stackbuf;
+	format.bufbegin	= stackbuf;
+	format.bufend	= stackbuf + sizeof(stackbuf);
 	format.grow	= str_grow;
 	format.flushed	= 0;
 
@@ -37,11 +45,13 @@ static char *sstrv(char *(*seal)(Buffer *), const char *fmt, va_list args) {
 	fmtputc(&format, '\0');
 	gcenable();
 
+	if (format.u.p == NULL)
+		return dup(stackbuf);
 	return seal(format.u.p);
 }
 
 extern char *strv(const char *fmt, va_list args) {
-	return sstrv(sealbuffer, fmt, args);
+	return sstrv(gcdup, sealbuffer, fmt, args);
 }
 
 /* str -- create a string (in garbage collection space) by printing to it */
@@ -59,7 +69,7 @@ extern char *pstr VARARGS1(const char *, fmt) {
 	char *s;
 	va_list args;
 	VA_START(args, fmt);
-	s = sstrv(psealbuffer, fmt, args);
+	s = sstrv(pdup, psealbuffer, fmt, args);
 	va_end(args);
 	return s;
 }

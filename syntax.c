@@ -128,7 +128,7 @@ extern Tree *mkpipe(Tree *t1, int outfd, int infd, Tree *t2) {
  *	tree and then rewriting the tree to include the appropriate commands
  */
 
-static Tree placeholder = { nRedir, {{NULL}} };
+static Tree placeholder = { nRedir, FALSE, {{NULL}} };
 
 extern Tree *redirect(Parser *p, Tree *t) {
 	Tree *r, *rp;
