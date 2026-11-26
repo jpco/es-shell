@@ -207,25 +207,29 @@ static const Limit limits[] = {
 	{ "stacksize",		RLIMIT_STACK,	sizesuf },
 	{ "coredumpsize",	RLIMIT_CORE,	sizesuf },
 
-#ifdef RLIMIT_RSS	/* SysVr4 does not have this */
-	{ "memoryuse",		RLIMIT_RSS,	sizesuf },
+#ifdef RLIMIT_AS	/* SUSv2, but not universal */
+	{ "memoryuse",		RLIMIT_AS,	sizesuf },
 #endif
-#ifdef RLIMIT_VMEM	/* instead, they have this! */
-	{ "memorysize",		RLIMIT_VMEM,	sizesuf },
+#if defined(RLIMIT_VMEM) && !defined(RLIMIT_AS) /* old name for AS */
+	{ "memoryuse",		RLIMIT_VMEM,	sizesuf },
+#endif
+#ifdef RLIMIT_RSS	/* SysVr4 does not have this */
+	{ "memoryrss",		RLIMIT_RSS,	sizesuf },
 #endif
 
 #ifdef RLIMIT_MEMLOCK	/* 4.4bsd adds an unimplemented limit on non-pageable memory */
-	{ "lockedmemory",	RLIMIT_CORE,	sizesuf },
+	{ "lockedmemory",	RLIMIT_MEMLOCK,	sizesuf },
 #endif
 
-#ifdef RLIMIT_NOFILE	/* SunOS 4.1 adds a limit on file descriptors */
+#ifdef RLIMIT_NOFILE	/* SUSv2, but not universal */
 	{ "descriptors",	RLIMIT_NOFILE,	NULL },
-#elif defined(RLIMIT_OFILE) /* but 4.4bsd uses this name for it */
-	{ "descriptors",	RLIMIT_OFILE,	NULL },
 #endif
 
 #ifdef RLIMIT_NPROC	/* 4.4bsd adds a limit on child processes */
 	{ "processes",		RLIMIT_NPROC,	NULL },
+#endif
+#ifdef RLIMIT_LOCKS
+	{ "filelocks",		RLIMIT_LOCKS,	NULL },
 #endif
 
 	{ NULL, 0, NULL }
@@ -253,14 +257,13 @@ static void printlimit(const Limit *limit, Boolean hard) {
 	}
 }
 
-static long parselimit(const Limit *limit, char *s) {
-	long lim;
+static rlim_t parselimit(const Limit *limit, char *s) {
 	char *t;
 	const Suffix *suf = limit->suffix;
+	rlim_t lim = 1;
+
 	if (streq(s, "unlimited"))
 		return RLIM_INFINITY;
-	if (!isdigit(*s))
-		fail("$&limit", "%s: bad limit value", s);
 	if (suf == timesuf && (t = strchr(s, ':')) != NULL) {
 		char *u;
 		lim = strtol(s, &u, 0) * 60;
@@ -311,11 +314,10 @@ PRIM(limit) {
 		if (lp == NULL)
 			printlimit(lim, hard);
 		else {
-			long n;
+			rlim_t n;
 			struct rlimit rlim;
 			getrlimit(lim->flag, &rlim);
-			if ((n = parselimit(lim, getstr(lp->term))) < 0)
-				fail("$&limit", "%s: bad limit value", getstr(lp->term));
+			n = parselimit(lim, getstr(lp->term));
 			if (hard)
 				rlim.rlim_max = (LIMIT_T)n;
 			else
