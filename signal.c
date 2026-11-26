@@ -174,11 +174,11 @@ extern void initsignals(Boolean interactive, Boolean allowdumps) {
 			);
 
 	for (sig = 1; sig < NSIG; sig++) {
-		Sighandler h;
+		Sighandler h = SIG_DFL;
 #if HAVE_SIGACTION
 		struct sigaction sa;
-		sigaction(sig, NULL, &sa);
-		h = sa.sa_handler;
+		if (sigaction(sig, NULL, &sa) == 0)
+			h = sa.sa_handler;
 		if (h == SIG_IGN)
 			sigeffect[sig] = sig_ignore;
 #else /* !HAVE_SIGACTION */
