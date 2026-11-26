@@ -32,8 +32,10 @@ static Boolean ingroupset(gidset_t gid) {
 		ngroups = getgroups(0, NULL);
 		if (ngroups == -1)
 			fail("$&access", "getgroups: %s", esstrerror(errno));
-		gidset = ealloc(ngroups * sizeof(gidset_t));
-		assert(getgroups(ngroups, gidset) != -1);
+		if (ngroups > 0) {
+			gidset = ealloc(ngroups * sizeof(gidset_t));
+			assert(getgroups(ngroups, gidset) != -1);
+		}
 		initialized = TRUE;
 	}
 	for (i = 0; i < ngroups; i++)
