@@ -33,6 +33,7 @@ typedef struct Here Here;
 %left		ANDAND OROR NL
 %left		'!'
 %left <tree>	PIPE
+%left		PREDIR	/* fictitious */
 %right		'$'
 %left		SUB
 
@@ -72,7 +73,7 @@ cmdsan	: cmdsa			{ $$ = $1; }
 
 cmd	:		%prec LET		{ $$ = NULL; }
 	| simple				{ $$ = redirect(p, $1); if ($$ == &errornode) YYABORT; }
-	| redir cmd	%prec '!'		{ $$ = redirect(p, mk(nRedir, $1, $2)); if ($$ == &errornode) YYABORT; }
+	| redir cmd	%prec PREDIR		{ $$ = redirect(p, mk(nRedir, $1, $2)); if ($$ == &errornode) YYABORT; }
 	| first assign				{ $$ = mk(nAssign, $1, $2); }
 	| fn					{ $$ = $1; }
 	| binder nl '(' bindings ')' nl cmd	{ $$ = mk($1, $4, $7); }

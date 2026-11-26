@@ -86,7 +86,8 @@ typedef struct Here Here;
     ENDFILE = 279,                 /* ENDFILE  */
     ERROR = 280,                   /* ERROR  */
     MATCH = 281,                   /* MATCH  */
-    PIPE = 282                     /* PIPE  */
+    PIPE = 282,                    /* PIPE  */
+    PREDIR = 283                   /* PREDIR  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -95,13 +96,13 @@ typedef struct Here Here;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 39 "./parse.y"
+#line 40 "./parse.y"
 
 	Tree *tree;
 	char *str;
 	NodeKind kind;
 
-#line 105 "y.tab.h"
+#line 106 "y.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
