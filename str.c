@@ -71,11 +71,13 @@ extern char *pstr VARARGS1(const char *, fmt) {
 static int mprint_grow(Format *format, size_t more) {
 	char *buf;
 	size_t len = format->bufend - format->bufbegin + 1;
+	size_t used = format->buf - format->bufbegin;
+
 	len = (len >= more)
 		? len * 2
 		: ((len + more) + PRINT_ALLOCSIZE) &~ (PRINT_ALLOCSIZE - 1);
 	buf = erealloc(format->bufbegin, len);
-	format->buf	 = buf + (format->buf - format->bufbegin);
+	format->buf	 = buf + used;
 	format->bufbegin = buf;
 	format->bufend	 = buf + len - 1;
 	return 0;
