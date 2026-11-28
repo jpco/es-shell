@@ -21,6 +21,7 @@
 #endif
 
 #include <sys/stat.h>
+#include <termios.h>
 
 PRIM(newpgrp) {
 	int e;
@@ -81,7 +82,11 @@ static Noreturn failexec(char *file, List *args) {
 /* forkexec -- fork (if necessary) and exec */
 static List *forkexec(char *file, List *list, Boolean inchild) {
 	int pid, status;
+	struct termios t;
+	Boolean interactive = isinteractive();
 	Vector *env;
+	if (interactive)
+		tcgetattr(0, &t);
 	gcdisable();
 	env = mkenv();
 	pid = efork(!inchild, FALSE);
@@ -91,12 +96,15 @@ static List *forkexec(char *file, List *list, Boolean inchild) {
 	}
 	gcenable();
 	status = ewaitfor(pid);
-	if ((status & 0xff) == 0) {
+	if (WIFSIGNALED(status)) {
+		if (interactive)
+			tcsetattr(0, TCSANOW, &t);
+		SIGCHK();
+	} else {
 		sigint_newline = FALSE;
 		SIGCHK();
 		sigint_newline = TRUE;
-	} else
-		SIGCHK();
+	}
 	printstatus(0, status);
 	return mklist(mkterm(mkstatus(status), NULL), NULL);
 }
