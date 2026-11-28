@@ -105,6 +105,8 @@ test 'complex variables' {
 		'$(foo bar)'
 		'$(foo^$bar)'
 		'$(<={foo})'
+		'$(a.b)'
+		'$(~~)'
 	)) {
 		assert {~ `` \n {eval echo '{'$syntax'}'} '{'^$syntax^'}'}
 	}

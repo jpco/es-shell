@@ -45,6 +45,17 @@ static void binding(Format *f, char *keyword, Tree *tree) {
 	fmtprint(f, ")");
 }
 
+/* simplevar -- is the string a 'simple' var name that requires no parens? */
+static Boolean simplevar(const char *s) {
+	extern const char dnw[];
+	if (*s == '\0')
+		return FALSE;
+	for (; *s != '\0'; s++)
+		if (dnw[(unsigned char)*s])
+			return FALSE;
+	return TRUE;
+}
+
 /* %T -- print a tree */
 static Boolean Tconv(Format *f) {
 	Tree *n = va_arg(f->args, Tree *);
@@ -133,7 +144,9 @@ top:
 		case 1:
 			if (n->kind == nWord || n->kind == nQword ||
 				(n->kind == nList &&
-				 (n->u[0].p->kind == nWord || n->u[0].p->kind == nQword)))
+				 (n->u[0].p->kind == nQword ||
+				  (n->u[0].p->kind == nWord &&
+				   simplevar(n->u[0].p->u[0].s)))))
 				goto top;
 			fmtprint(f, "(%#T)", n);
 		}
@@ -336,10 +349,10 @@ static Boolean Sconv(Format *f) {
 	extern const char nw[];
 
 	s = va_arg(f->args, const unsigned char *);
-	if (f->flags & FMT_altform || *s == '\0')
+	if (f->flags & FMT_altform || *s == '\0' || *s == '~')
 		goto quoteit;
 	for (t = s; (c = *t) != '\0'; t++)
-		if (nw[c] || c == '@')
+		if (nw[c] || c == '@' || c == '*' || c == '?' || c == '[' || iscntrl(c))
 			goto quoteit;
 	fmtprint(f, "%s", s);
 	return FALSE;
