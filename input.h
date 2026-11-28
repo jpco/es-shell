@@ -9,7 +9,7 @@ struct Input {
 	const char *name, *str;
 	int lineno;
 	int fd;
-	Boolean eof;
+	Boolean eof, newline;
 	int runflags;
 
 	/* read buffer */

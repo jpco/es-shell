@@ -25,16 +25,16 @@ static Input *input = NULL;
  */
 
 /* locate -- identify where an error came from */
-static const char *locate(Input *in, const char *s) {
+static const char *locate(Input *in, const char *s, int offset) {
 	return (in->runflags & run_interactive)
 		? pstr("%s", s)
-		: pstr("%s:%d: %s", in->name, in->lineno, s);
+		: pstr("%s:%d: %s", in->name, in->lineno + offset, s);
 }
 
 /* yyerror -- yacc error entry point */
 extern void yyerror(Parser *p, const char *s) {
 	if (p->error == NULL)	/* first error is generally the most informative */
-		p->error = locate(p->input, s);
+		p->error = locate(p->input, s, 0);
 }
 
 
@@ -45,8 +45,8 @@ extern void yyerror(Parser *p, const char *s) {
 /* read a BUFSIZE chunk of script from Input.
  * this should be user-accessible through $&read or something. */
 static char *readchunk(Input *in) {
-	int nread;
-	char readbuf[BUFSIZE], *s = readbuf, *zp;
+	int nread, lineno = in->newline ? 1 : 0;
+	char readbuf[BUFSIZE], *s = readbuf, *zp, *np = s;
 	Buffer *buf;
 	do {
 		nread = read(in->fd, s, BUFSIZE);
@@ -56,7 +56,12 @@ static char *readchunk(Input *in) {
 		return NULL;
 	buf = openbuffer(nread);
 	while ((zp = memchr(s, '\0', nread)) != NULL) {
-		eprint("%s\n", locate(in, "null character ignored"));
+		np = s;
+		while ((np = memchr(np, '\n', zp - np)) != NULL) {
+			lineno++;
+			np++;
+		}
+		eprint("%s\n", locate(in, "null character ignored", lineno));
 		buf = bufncat(buf, s, zp - s);
 		nread -= zp - s + 1;
 		s = zp + 1;
@@ -102,12 +107,18 @@ extern int get(Parser *p) {
 	if (p->ungot > 0)
 		return p->unget[--p->ungot];
 	c = in->buf < in->bufend ? *in->buf++ : fill(p);
-	if (c != EOF && p->input->runflags & run_echoinput) {
-		char buf = (char)c;
-		ewrite(2, &buf, 1);
+	if (c != EOF) {
+		if (in->newline) {
+			in->lineno++;
+			in->newline = FALSE;
+		}
+		if (in->runflags & run_echoinput) {
+			char buf = (char)c;
+			ewrite(2, &buf, 1);
+		}
 	}
 	if (c == '\n')
-		p->input->lineno++;
+		in->newline = TRUE;
 	return c;
 }
 

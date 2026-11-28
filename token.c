@@ -59,10 +59,10 @@ const char dnw[] = {
 
 /* scanerror -- called for lexical errors */
 static void scanerror(Parser *p, int c, char *s) {
+	yyerror(p, s);
 	while (c != '\n' && c != EOF)
 		c = get(p);
 	unget(p, '\n');
-	yyerror(p, s);
 }
 
 /*
